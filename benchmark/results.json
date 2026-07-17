@@ -1,0 +1,92 @@
+[
+  {
+    "task": "ASR vi",
+    "model": "PhoWhisper-base",
+    "device": "cuda",
+    "latency_s": 0.730606466666965,
+    "rtf": 0.15297455332222887,
+    "wer_pct": 14.285714285714285,
+    "chrf": null,
+    "bleu": null
+  },
+  {
+    "task": "ASR vi",
+    "model": "whisper-small",
+    "device": "cuda",
+    "latency_s": 0.8963271166667255,
+    "rtf": 0.18767318188164267,
+    "wer_pct": 16.3265306122449,
+    "chrf": null,
+    "bleu": null
+  },
+  {
+    "task": "ASR en",
+    "model": "whisper-small",
+    "device": "cuda",
+    "latency_s": 0.7530343499997798,
+    "rtf": 0.15727534461148282,
+    "wer_pct": 0.0,
+    "chrf": null,
+    "bleu": null
+  },
+  {
+    "task": "vi audio->en text (direct)",
+    "model": "whisper-small",
+    "device": "cuda",
+    "latency_s": 1.25253456666663,
+    "rtf": null,
+    "wer_pct": null,
+    "chrf": 47.97139711161218,
+    "bleu": 25.87390879783729
+  },
+  {
+    "task": "ASR vi",
+    "model": "whisper-large-v3-turbo",
+    "device": "cuda",
+    "latency_s": 2.7055987500001115,
+    "rtf": 0.5664989007537922,
+    "wer_pct": 14.285714285714285,
+    "chrf": null,
+    "bleu": null
+  },
+  {
+    "task": "ASR en",
+    "model": "whisper-large-v3-turbo",
+    "device": "cuda",
+    "latency_s": 2.188230400000066,
+    "rtf": 0.45702389306601204,
+    "wer_pct": 0.0,
+    "chrf": null,
+    "bleu": null
+  },
+  {
+    "task": "vi audio->en text (direct)",
+    "model": "whisper-large-v3-turbo",
+    "device": "cuda",
+    "latency_s": 3.3684836333331987,
+    "rtf": null,
+    "wer_pct": null,
+    "chrf": 13.247529054410784,
+    "bleu": 1.1930935962129225
+  },
+  {
+    "task": "MT vi->en",
+    "model": "envit5-translation",
+    "device": "cuda",
+    "latency_s": 2.2932940166671565,
+    "rtf": null,
+    "wer_pct": null,
+    "chrf": 73.57038857182341,
+    "bleu": 57.221985464816974
+  },
+  {
+    "task": "MT en->vi",
+    "model": "envit5-translation",
+    "device": "cuda",
+    "latency_s": 4.543779600000107,
+    "rtf": null,
+    "wer_pct": null,
+    "chrf": 75.45084254656163,
+    "bleu": 66.74072556046032
+  }
+]

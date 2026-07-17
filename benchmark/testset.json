@@ -1,0 +1,72 @@
+[
+  {
+    "id": "vi1",
+    "lang": "vi",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\vi1.mp3",
+    "text_ref": "Xin chào các anh chị, hôm nay chúng ta sẽ thảo luận về kế hoạch hợp tác giữa hai công ty.",
+    "translation_ref": "Hello everyone, today we will discuss the cooperation plan between our two companies."
+  },
+  {
+    "id": "vi2",
+    "lang": "vi",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\vi2.mp3",
+    "text_ref": "Bên mình đề xuất mức giá là hai trăm nghìn đô la Mỹ cho giai đoạn đầu tiên.",
+    "translation_ref": "We propose a price of two hundred thousand US dollars for the first phase."
+  },
+  {
+    "id": "vi3",
+    "lang": "vi",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\vi3.mp3",
+    "text_ref": "Team mình sẽ follow up cái proposal này và confirm lại deadline với bên đối tác.",
+    "translation_ref": "Our team will follow up on this proposal and confirm the deadline with the partner."
+  },
+  {
+    "id": "vi4",
+    "lang": "vi",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\vi4.mp3",
+    "text_ref": "Chúng tôi mong muốn ký biên bản ghi nhớ trong quý ba năm nay.",
+    "translation_ref": "We would like to sign the memorandum of understanding in the third quarter of this year."
+  },
+  {
+    "id": "vi5",
+    "lang": "vi",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\vi5.mp3",
+    "text_ref": "Anh có thể gửi cho tôi báo cáo tài chính của năm ngoái được không?",
+    "translation_ref": "Could you send me last year's financial report?"
+  },
+  {
+    "id": "vi6",
+    "lang": "vi",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\vi6.mp3",
+    "text_ref": "Sản phẩm của chúng tôi đã có mặt tại thị trường Singapore và Malaysia.",
+    "translation_ref": "Our products are already available in the Singapore and Malaysia markets."
+  },
+  {
+    "id": "en1",
+    "lang": "en",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\en1.mp3",
+    "text_ref": "Thank you for coming to Singapore, we are excited about this partnership.",
+    "translation_ref": "Cảm ơn quý vị đã đến Singapore, chúng tôi rất hào hứng với quan hệ hợp tác này."
+  },
+  {
+    "id": "en2",
+    "lang": "en",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\en2.mp3",
+    "text_ref": "Our company specializes in artificial intelligence solutions for logistics.",
+    "translation_ref": "Công ty chúng tôi chuyên về các giải pháp trí tuệ nhân tạo cho ngành logistics."
+  },
+  {
+    "id": "en3",
+    "lang": "en",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\en3.mp3",
+    "text_ref": "Can we schedule a follow-up meeting next Tuesday morning?",
+    "translation_ref": "Chúng ta có thể sắp xếp một cuộc họp tiếp theo vào sáng thứ Ba tuần sau không?"
+  },
+  {
+    "id": "en4",
+    "lang": "en",
+    "audio": "D:\\python_project\\SEA_VIET_NAM\\benchmark\\audio\\en4.mp3",
+    "text_ref": "We need to finalize the contract terms before the end of this month.",
+    "translation_ref": "Chúng ta cần hoàn thiện các điều khoản hợp đồng trước cuối tháng này."
+  }
+]
