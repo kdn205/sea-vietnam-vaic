@@ -28,6 +28,9 @@ export default function AppTabs() {
           <TabTrigger name="home" href="/" asChild>
             <TabButton>{t('home')}</TabButton>
           </TabTrigger>
+          <TabTrigger name="diarization" href="/diarization" asChild>
+            <TabButton>Diarization</TabButton>
+          </TabTrigger>
         </CustomTabList>
       </TabList>
     </Tabs>

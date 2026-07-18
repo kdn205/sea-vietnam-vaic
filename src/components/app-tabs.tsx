@@ -19,6 +19,13 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>{t('home')}</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="diarization">
+        <NativeTabs.Trigger.Label>Diarization</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon
+          sf={{ default: 'person.2', selected: 'person.2.fill' }}
+          md="group"
+        />
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }

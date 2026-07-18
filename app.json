@@ -45,6 +45,8 @@
         }
       ],
       "expo-speech-recognition",
+      "@siteed/audio-studio",
+      "@siteed/sherpa-onnx.rn/app.plugin",
       [
         "expo-camera",
         {
