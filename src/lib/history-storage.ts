@@ -39,7 +39,10 @@ async function writeAll(sessions: StoredSession[]): Promise<void> {
 }
 
 export function createSessionId(): string {
-  return `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  if (globalThis.crypto?.randomUUID) {
+    return `session-${globalThis.crypto.randomUUID()}`;
+  }
+  return `session-${Date.now()}`;
 }
 
 export async function saveSessionEntries(sessionId: string, startedAt: number, entries: StoredEntry[]): Promise<void> {
