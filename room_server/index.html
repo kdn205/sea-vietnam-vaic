@@ -2,177 +2,245 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>Room dịch họp</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b57d0">
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>Room Dịch Họp — Việt ⇄ English</title>
 <style>
-  * { box-sizing: border-box; margin: 0; }
-  body { font-family: system-ui, sans-serif; background: #f0f2f5; height: 100dvh;
-         display: flex; flex-direction: column; }
-  header { background: #1a73e8; color: #fff; padding: 10px 14px; display: flex;
-           justify-content: space-between; align-items: center; }
-  header .title { font-weight: 700; }
-  header .roster { font-size: 12px; opacity: .9; }
-  #feed { flex: 1; overflow-y: auto; padding: 12px; }
-  .bubble { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;
-            box-shadow: 0 1px 2px rgba(0,0,0,.08); max-width: 720px; }
-  .bubble.mine { border-left: 4px solid #1a73e8; }
+  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
+  :root { --blue: #0b57d0; --blue2: #1a73e8; --bg: #f2f4f8; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg);
+         height: 100dvh; display: flex; flex-direction: column; }
+
+  /* ---------- Landing ---------- */
+  #landing { position: fixed; inset: 0; overflow-y: auto; z-index: 10;
+             background: linear-gradient(160deg, #0b57d0 0%, #083a8c 60%, #062b66 100%); }
+  .land-wrap { max-width: 440px; margin: 0 auto; padding: 42px 22px; }
+  .logo { font-size: 44px; }
+  .land-wrap h1 { color: #fff; font-size: 26px; margin: 8px 0 2px; }
+  .land-wrap .sub { color: #b9ccf3; font-size: 14px; margin-bottom: 26px; }
+  .card { background: #fff; border-radius: 16px; padding: 18px; margin-bottom: 16px;
+          box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+  .card h3 { font-size: 16px; color: #0b57d0; margin-bottom: 12px; }
+  .field { width: 100%; font-size: 16px; padding: 12px; border: 1.5px solid #d5dbe6;
+           border-radius: 10px; margin-bottom: 10px; background: #fafbfd; }
+  .field:focus { outline: none; border-color: var(--blue2); }
+  .btn { width: 100%; font-size: 16px; font-weight: 700; padding: 13px; border: none;
+         border-radius: 10px; background: var(--blue2); color: #fff; cursor: pointer; }
+  .btn:active { transform: scale(.98); }
+  .btn.ghost { background: #eef3fd; color: var(--blue); }
+  .code-input { text-transform: uppercase; letter-spacing: 6px; text-align: center;
+                font-weight: 700; font-size: 20px; }
+  #landerr { color: #ffb4ab; font-size: 14px; min-height: 20px; margin-top: 4px;
+             text-align: center; }
+  .offline-note { color: #8fb0ea; font-size: 12px; text-align: center; margin-top: 14px; }
+
+  /* ---------- Meeting ---------- */
+  header { background: var(--blue); color: #fff; padding: 10px 14px;
+           display: none; align-items: center; gap: 10px; }
+  .room-chip { background: rgba(255,255,255,.16); border-radius: 8px; padding: 5px 10px;
+               font-weight: 800; letter-spacing: 2px; font-size: 15px; cursor: pointer; }
+  header .info { flex: 1; min-width: 0; }
+  header .title { font-weight: 700; font-size: 15px; }
+  header .roster { font-size: 11px; opacity: .85; white-space: nowrap;
+                   overflow: hidden; text-overflow: ellipsis; }
+  .iconbtn { background: rgba(255,255,255,.14); border: none; color: #fff;
+             font-size: 17px; border-radius: 9px; padding: 8px 10px; cursor: pointer; }
+  #toolrow { display: none; gap: 6px; padding: 8px 10px; background: #fff;
+             border-bottom: 1px solid #e3e7ee; flex-wrap: wrap; align-items: center;
+             font-size: 13px; }
+  #toolrow select, #toolrow button { font-size: 13px; padding: 6px 8px;
+             border-radius: 8px; border: 1px solid #cfd6e0; background: #fff; }
+  .level { height: 4px; background: #e0e0e0; overflow: hidden; display: none; }
+  .level > div { height: 100%; width: 0; background: #34a853; transition: width .1s; }
+  #feed { flex: 1; overflow-y: auto; padding: 12px 12px 96px; display: none; }
+  .bubble { background: #fff; border-radius: 14px; padding: 11px 13px; margin-bottom: 10px;
+            box-shadow: 0 1px 3px rgba(15,30,60,.08); max-width: 760px; }
+  .bubble.mine { border-left: 4px solid var(--blue2); }
   .bubble.partial { opacity: .55; font-style: italic; }
   .bubble.summary { border-left: 4px solid #f9ab00; background: #fffbf0;
                     white-space: pre-wrap; }
-  .meta { font-size: 11px; color: #888; margin-bottom: 4px; }
-  .main { font-size: 17px; font-weight: 600; color: #111; }
-  .sub  { font-size: 13px; color: #666; margin-top: 3px; }
-  footer { padding: 10px; background: #fff; border-top: 1px solid #ddd; }
-  .row { display: flex; gap: 8px; }
-  input, select, button { font-size: 16px; padding: 10px; border: 1px solid #ccc;
-                          border-radius: 8px; }
-  input { flex: 1; }
-  button { background: #1a73e8; color: #fff; border: none; font-weight: 700; }
-  button.rec { background: #d93025; }
-  #joinbox { position: fixed; inset: 0; background: #f0f2f5; display: flex;
-             flex-direction: column; justify-content: center; padding: 24px; gap: 12px; }
-  #joinbox h2 { color: #1a73e8; }
-  #status { font-size: 12px; color: #888; padding: 4px 14px; }
-  .level { height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden; }
-  .level > div { height: 100%; width: 0; background: #34a853; transition: width .1s; }
+  .meta { font-size: 11px; color: #8a93a3; margin-bottom: 4px; }
+  .main { font-size: 17px; font-weight: 600; color: #14181f; }
+  .sub  { font-size: 13px; color: #667085; margin-top: 3px; }
+  #status { font-size: 12px; color: #8a93a3; padding: 4px 14px 6px; display: none; }
+
+  /* mic FAB */
+  #micwrap { position: fixed; left: 0; right: 0; bottom: 18px; display: none;
+             justify-content: center; pointer-events: none; }
+  #micbtn { pointer-events: auto; width: 72px; height: 72px; border-radius: 50%;
+            border: none; background: var(--blue2); color: #fff; font-size: 30px;
+            box-shadow: 0 6px 20px rgba(11,87,208,.45); cursor: pointer; }
+  #micbtn.rec { background: #d93025; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(217,48,37,.45); }
+                     70% { box-shadow: 0 0 0 20px rgba(217,48,37,0); }
+                     100% { box-shadow: 0 0 0 0 rgba(217,48,37,0); } }
 </style>
 </head>
 <body>
-<div id="joinbox">
-  <h2>Room dịch họp Việt–Anh</h2>
-  <input id="name" placeholder="Tên của bạn / Your name" maxlength="20">
-  <select id="lang">
-    <option value="vi">Tôi nói tiếng Việt</option>
-    <option value="en">I speak English</option>
-  </select>
-  <button onclick="join()">Vào room / Join</button>
-  <div id="joinerr" style="color:#d93025"></div>
+
+<!-- ============ LANDING ============ -->
+<div id="landing">
+  <div class="land-wrap">
+    <div class="logo">🌐</div>
+    <h1>Room Dịch Họp</h1>
+    <div class="sub">Phiên dịch Việt ⇄ English thời gian thực · offline · on-premise</div>
+
+    <div class="card">
+      <h3>Thông tin của bạn</h3>
+      <input id="name" class="field" placeholder="Tên hiển thị / Display name" maxlength="20">
+      <select id="lang" class="field">
+        <option value="vi">🇻🇳 Tôi nói tiếng Việt</option>
+        <option value="en">🇬🇧 I speak English</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <h3>Tạo phòng họp mới</h3>
+      <button class="btn" onclick="doCreate()">➕ Tạo phòng & lấy mã</button>
+    </div>
+
+    <div class="card">
+      <h3>Vào phòng có sẵn</h3>
+      <input id="roomcode" class="field code-input" placeholder="MÃ PHÒNG" maxlength="5"
+             autocapitalize="characters" autocomplete="off">
+      <button class="btn ghost" onclick="doJoin()">Vào phòng / Join</button>
+    </div>
+
+    <div id="landerr"></div>
+    <div class="offline-note">Hoạt động không cần internet — cùng Wi-Fi/hotspot là dùng được.<br>
+      Mẹo: nhớ TẮT 4G trên điện thoại khi dùng mạng hotspot.</div>
+  </div>
 </div>
 
-<div id="microw" style="display:none; padding:6px 10px; background:#fff; border-bottom:1px solid #eee; font-size:14px">
-  🎙 Mic: <select id="micsel" style="max-width:55%; font-size:14px; padding:4px"></select>
-  &nbsp; 👁 Đọc bằng: <select id="displang" style="font-size:14px; padding:4px">
-    <option value="vi">Tiếng Việt</option>
-    <option value="en">English</option>
-  </select>
-  &nbsp; <button onclick="location.href='/transcript'"
-    style="font-size:13px; padding:5px 8px">📥 Biên bản</button>
-  <button id="sumbtn" onclick="reqSummary()"
-    style="font-size:13px; padding:5px 8px">📝 Tóm tắt</button>
-  <button onclick="newSession()"
-    style="font-size:13px; padding:5px 8px; background:#fff; color:#d93025; border:1px solid #d93025">🆕 Họp mới</button>
-</div>
-<header style="display:none" id="hdr">
-  <div>
-    <div class="title">Room dịch họp</div>
+<!-- ============ MEETING ============ -->
+<header id="hdr">
+  <span class="room-chip" id="roomchip" onclick="copyRoom()" title="Bấm để copy mã phòng">·····</span>
+  <div class="info">
+    <div class="title">Room Dịch Họp</div>
     <div class="roster" id="roster"></div>
   </div>
-  <button id="micbtn" onclick="toggleMic()">🎙 Nói</button>
+  <button class="iconbtn" onclick="toggleTools()" title="Cài đặt & công cụ">⚙</button>
 </header>
-<div class="level"><div id="lvl"></div></div>
-<div id="feed" style="display:none"></div>
+
+<div id="toolrow">
+  🎙 <select id="micsel" style="max-width:34%"></select>
+  👁 <select id="displang">
+      <option value="vi">Tiếng Việt</option>
+      <option value="en">English</option>
+    </select>
+  <button onclick="location.href='/transcript?room='+roomId">📥 Biên bản</button>
+  <button id="sumbtn" onclick="reqSummary()">📝 Tóm tắt</button>
+  <button onclick="newSession()" style="color:#d93025; border-color:#d93025">🆕 Họp mới</button>
+</div>
+
+<div class="level" id="levelbar"><div id="lvl"></div></div>
+<div id="feed"></div>
 <div id="status"></div>
 
+<div id="micwrap"><button id="micbtn" onclick="toggleMic()">🎙</button></div>
+
 <script>
-let ws, ctx, node, stream, myName, myLang, micOn = false, maxPeak = 0, micStartT = 0, micDead = false;
-let joined = false, wakeLock = null;
+let ws, ctx, node, stream, myName, myLang, roomId = '';
+let micOn = false, maxPeak = 0, micStartT = 0, micDead = false;
+let joined = false, wakeLock = null, pendingCreate = false;
+
+function el(id) { return document.getElementById(id); }
+function setStatus(t) { el('status').textContent = t; }
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
 async function keepAwake() {
-  // giu man hinh dien thoai khong tat khi dang trong room
   try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && joined) keepAwake();
 });
 
-async function reqSummary() {
-  const btn = el('sumbtn');
-  btn.disabled = true;
-  setStatus('Đang tóm tắt cuộc họp (LLM local, có thể mất 10-30s)...');
-  try {
-    const r = await fetch('/summary', {method: 'POST'});
-    const d = await r.json();
-    if (d.error) setStatus(d.error);
-  } catch (e) {
-    setStatus('Lỗi gọi tóm tắt: ' + e.message);
-  } finally {
-    btn.disabled = false;
-  }
-}
-
-async function newSession() {
-  if (!confirm('Bắt đầu cuộc họp mới?\nBiên bản hiện tại sẽ được lưu file và màn hình mọi người xóa trắng.')) return;
-  try { await fetch('/new-session', {method: 'POST'}); }
-  catch (e) { setStatus('Lỗi: ' + e.message); }
-}
-
-async function fillMics() {
-  // xin quyen truoc de enumerateDevices tra ve ten thiet bi day du
-  try {
-    const tmp = await navigator.mediaDevices.getUserMedia({audio: true});
-    tmp.getTracks().forEach(t => t.stop());
-  } catch (e) { setStatus('Chưa được cấp quyền mic: ' + e.message); return; }
-  const devs = await navigator.mediaDevices.enumerateDevices();
-  const sel = el('micsel');
-  sel.innerHTML = '';
-  devs.filter(d => d.kind === 'audioinput').forEach((d, i) => {
-    const o = document.createElement('option');
-    o.value = d.deviceId;
-    o.textContent = d.label || ('Mic ' + (i + 1));
-    sel.appendChild(o);
-  });
-  const saved = localStorage.getItem('micId');
-  if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
-  sel.onchange = async () => {
-    localStorage.setItem('micId', sel.value);
-    if (micOn) { await toggleMic(); await toggleMic(); }  // khoi dong lai stream voi mic moi
-  };
-}
-
-function el(id) { return document.getElementById(id); }
-function setStatus(t) { el('status').textContent = t; }
-
-function join() {
-  myName = el('name').value.trim() || 'khach';
+/* ---------- Landing flows ---------- */
+function readIdentity() {
+  myName = el('name').value.trim();
   myLang = el('lang').value;
-  connect(false);
+  if (!myName) { el('landerr').textContent = 'Nhập tên của bạn trước nhé.'; return false; }
+  localStorage.setItem('myName', myName);
+  localStorage.setItem('myLang', myLang);
+  return true;
 }
+function doCreate() { if (readIdentity()) { pendingCreate = true; connect(false); } }
+function doJoin() {
+  const code = el('roomcode').value.trim().toUpperCase();
+  if (!readIdentity()) return;
+  if (code.length < 4) { el('landerr').textContent = 'Mã phòng gồm 5 ký tự.'; return; }
+  pendingCreate = false; roomId = code; connect(false);
+}
+window.addEventListener('load', () => {
+  el('name').value = localStorage.getItem('myName') || '';
+  el('lang').value = localStorage.getItem('myLang') || 'vi';
+  const h = (location.hash || '').replace('#', '').toUpperCase();
+  if (h) el('roomcode').value = h;   // link/QR dang https://ip:8443/#MAPHONG
+});
 
+/* ---------- WebSocket ---------- */
 function connect(isReconnect) {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   ws.binaryType = 'arraybuffer';
   ws.onopen = () => {
-    ws.send(JSON.stringify({type: 'join', name: myName, lang: myLang}));
-    joined = true;
-    el('joinbox').style.display = 'none';
-    el('hdr').style.display = 'flex';
-    el('microw').style.display = 'block';
-    el('feed').style.display = 'block';
-    // mac dinh doc bang ngon ngu minh noi; doi duoc bat cu luc nao
-    el('displang').value = localStorage.getItem('dispLang') || myLang;
-    el('displang').onchange = () => localStorage.setItem('dispLang', el('displang').value);
-    setStatus(isReconnect ? 'Đã kết nối lại.' : 'Đã vào room. Bấm 🎙 để nói.');
-    keepAwake();
-    if (!isReconnect) fillMics();
+    const msg = {type: 'join', name: myName, lang: myLang};
+    if (pendingCreate && !isReconnect) msg.create = true; else msg.room = roomId;
+    ws.send(JSON.stringify(msg));
   };
   ws.onmessage = e => handle(JSON.parse(e.data));
   ws.onclose = () => {
     if (!joined) return;
-    // tu ket noi lai (dien thoai khoa man hinh / chap mang)
     setStatus('Mất kết nối — đang thử kết nối lại...');
     setTimeout(() => connect(true), 2000);
   };
-  ws.onerror = () => { el('joinerr').textContent = 'Không kết nối được server.'; };
+  ws.onerror = () => { el('landerr').textContent = 'Không kết nối được server.'; };
 }
 
+function enterMeeting() {
+  joined = true;
+  el('landing').style.display = 'none';
+  el('hdr').style.display = 'flex';
+  el('levelbar').style.display = 'block';
+  el('feed').style.display = 'block';
+  el('status').style.display = 'block';
+  el('micwrap').style.display = 'flex';
+  el('roomchip').textContent = roomId;
+  location.hash = roomId;
+  el('displang').value = localStorage.getItem('dispLang') || myLang;
+  el('displang').onchange = () => localStorage.setItem('dispLang', el('displang').value);
+  setStatus('Đã vào phòng ' + roomId + '. Bấm nút mic để nói — chữ và bản dịch hiện dần NGAY KHI đang nói.');
+  keepAwake();
+  fillMics();
+}
+
+function copyRoom() {
+  const link = location.origin + '/#' + roomId;
+  (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
+    .then(() => setStatus('Đã copy link mời: ' + link))
+    .catch(() => setStatus('Mã phòng: ' + roomId + ' — link: ' + link));
+}
+function toggleTools() {
+  const t = el('toolrow');
+  t.style.display = (t.style.display === 'flex') ? 'none' : 'flex';
+}
+
+/* ---------- Message handling ---------- */
 function handle(m) {
+  if (m.type === 'joined') { roomId = m.room; if (!joined) enterMeeting(); return; }
+  if (m.type === 'error') {
+    joined ? setStatus(m.text) : el('landerr').textContent = m.text;
+    try { ws.close(); } catch (e) {}
+    joined = false;
+    return;
+  }
   if (m.type === 'level') {
-    // ratio >= 1: server dang nghe thay giong; < 1: duoi nguong
     const bar = el('lvl');
     bar.style.width = Math.min(100, m.ratio * 33) + '%';
     bar.style.background = m.ratio >= 1 ? '#34a853' : '#d93025';
-    // phan hoi tuc thi: server vua bat dau ghi giong minh
-    if (micDead) return;  // giu nguyen canh bao mic cam, khong de status de len
+    if (micDead) return;
     if (m.speaking) setStatus('🎤 Đang thu giọng bạn — bản dịch hiện dần bên trên...');
     else if (micOn) setStatus('Đang nghe...');
     return;
@@ -184,7 +252,6 @@ function handle(m) {
     return;
   }
   if (m.type === 'summary') {
-    // render markdown toi gian: ### tieu de va **dam**
     const html = esc(m.text)
       .replace(/^#{2,3} (.*)$/gm, '<b style="font-size:15px">$1</b>')
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
@@ -205,33 +272,67 @@ function handle(m) {
   if (m.type !== 'partial' && m.type !== 'final') return;
 
   let b = el(m.id);
-  if (!b) {
-    b = document.createElement('div');
-    b.id = m.id;
-    el('feed').appendChild(b);
-  }
+  if (!b) { b = document.createElement('div'); b.id = m.id; el('feed').appendChild(b); }
   b.className = 'bubble' + (m.name === myName ? ' mine' : '') + (m.type === 'partial' ? ' partial' : '');
-  // chu TO theo "ngon ngu doc" nguoi xem tu chon (khong phu thuoc ngon ngu noi)
   const dispLang = el('displang').value;
   const mainText = (m.lang === dispLang) ? m.text : m.translation;
   const subText  = (m.lang === dispLang) ? m.translation : m.text;
-  const flag = m.lang === 'vi' ? 'VN' : 'EN';
+  const flag = m.lang === 'vi' ? '🇻🇳' : '🇬🇧';
   const timing = m.type === 'final' ? ` · ${m.dur}s · ASR ${m.t_asr}s + MT ${m.t_mt}s` : ' · …';
-  b.innerHTML = `<div class="meta">${m.name} [${flag}]${timing}</div>` +
+  b.innerHTML = `<div class="meta">${esc(m.name)} ${flag}${timing}</div>` +
                 `<div class="main">${esc(mainText)}</div>` +
                 `<div class="sub">${esc(subText)}</div>`;
-  // hop dai: giu 150 bubble gan nhat de trang khong nang dan
   const feed = el('feed');
   while (feed.children.length > 150) feed.removeChild(feed.firstChild);
   feed.scrollTop = feed.scrollHeight;
 }
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+/* ---------- Actions ---------- */
+async function newSession() {
+  if (!confirm('Bắt đầu cuộc họp mới?\nBiên bản hiện tại sẽ được lưu file và màn hình mọi người xóa trắng.')) return;
+  try { await fetch('/new-session?room=' + roomId, {method: 'POST'}); }
+  catch (e) { setStatus('Lỗi: ' + e.message); }
+}
+
+async function reqSummary() {
+  const btn = el('sumbtn');
+  btn.disabled = true;
+  setStatus('Đang tóm tắt cuộc họp (LLM local, có thể mất 10-30s)...');
+  try {
+    const r = await fetch('/summary?room=' + roomId, {method: 'POST'});
+    const d = await r.json();
+    if (d.error) setStatus(d.error);
+  } catch (e) { setStatus('Lỗi gọi tóm tắt: ' + e.message); }
+  finally { btn.disabled = false; }
+}
+
+/* ---------- Mic ---------- */
+async function fillMics() {
+  try {
+    const tmp = await navigator.mediaDevices.getUserMedia({audio: true});
+    tmp.getTracks().forEach(t => t.stop());
+  } catch (e) { setStatus('Chưa được cấp quyền mic: ' + e.message); return; }
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const sel = el('micsel');
+  sel.innerHTML = '';
+  devs.filter(d => d.kind === 'audioinput').forEach((d, i) => {
+    const o = document.createElement('option');
+    o.value = d.deviceId;
+    o.textContent = d.label || ('Mic ' + (i + 1));
+    sel.appendChild(o);
+  });
+  const saved = localStorage.getItem('micId');
+  if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+  sel.onchange = async () => {
+    localStorage.setItem('micId', sel.value);
+    if (micOn) { await toggleMic(); await toggleMic(); }
+  };
+}
 
 async function toggleMic() {
   if (micOn) {
     micOn = false;
-    el('micbtn').textContent = '🎙 Nói';
+    el('micbtn').textContent = '🎙';
     el('micbtn').classList.remove('rec');
     if (node) node.disconnect();
     if (stream) stream.getTracks().forEach(t => t.stop());
@@ -240,16 +341,11 @@ async function toggleMic() {
     return;
   }
   try {
-    // echoCancellation tat: no chuyen xoa am thanh phat tu loa cung may
-    // (lam hong test mo audio qua loa); autoGainControl bu mic yeu
     const micId = el('micsel').value;
     const cons = {echoCancellation: false, noiseSuppression: true, autoGainControl: true};
     if (micId) cons.deviceId = {exact: micId};
     stream = await navigator.mediaDevices.getUserMedia({audio: cons});
-  } catch (err) {
-    setStatus('Không truy cập được mic: ' + err.message);
-    return;
-  }
+  } catch (err) { setStatus('Không truy cập được mic: ' + err.message); return; }
   maxPeak = 0; micStartT = Date.now(); micDead = false;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   const src = ctx.createMediaStreamSource(stream);
@@ -258,29 +354,26 @@ async function toggleMic() {
   node.onaudioprocess = ev => {
     if (!micOn || ws.readyState !== 1) return;
     const inp = ev.inputBuffer.getChannelData(0);
-    // gui PCM int16: bang thong giam mot nua so voi float32
     const out = new Int16Array(Math.floor(inp.length / ratio));
     for (let i = 0; i < out.length; i++) {
       const v = inp[Math.floor(i * ratio)];
       const a = Math.abs(v); if (a > maxPeak) maxPeak = a;
       out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32768)));
     }
-    // canh bao mic cam: 3s ma tin hieu van ~0 -> mic nay chet, doi mic khac
     if (Date.now() - micStartT > 3000 && maxPeak < 0.002) {
       micDead = true;
-      setStatus('⚠ Mic này KHÔNG có tín hiệu — chọn mic khác ở menu "🎙 Mic" phía trên!');
+      setStatus('⚠ Mic này KHÔNG có tín hiệu — mở ⚙ và chọn mic khác!');
     } else if (micDead && maxPeak >= 0.002) {
-      micDead = false;
-      setStatus('Mic OK — đang nghe...');
+      micDead = false; setStatus('Mic OK — đang nghe...');
     }
-    ws.send(out.buffer);  // thanh level do server tinh va gui ve
+    ws.send(out.buffer);
   };
   src.connect(node);
   node.connect(ctx.destination);
   micOn = true;
-  el('micbtn').textContent = '⏸ Dừng';
+  el('micbtn').textContent = '⏸';
   el('micbtn').classList.add('rec');
-  setStatus('Đang nghe... cứ nói — chữ và bản dịch hiện DẦN ngay khi bạn đang nói (dòng mờ), dứt câu sẽ tự chốt đậm.');
+  setStatus('Đang nghe... cứ nói tự nhiên.');
 }
 </script>
 </body>
