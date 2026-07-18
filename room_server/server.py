@@ -173,6 +173,16 @@ class Room:
         self.started = time.strftime("%Y-%m-%d %H:%M")
         self.log_path = os.path.join(
             HERE, "logs", f"hop_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
+        self.empty_since = None     # thoi diem room trong (de tu mo phien moi)
+
+    EMPTY_RESET_S = 120  # room trong qua 2 phut -> cuoc hop moi, xoa bien ban cu
+
+    def new_session(self):
+        self.history = []
+        self.started = time.strftime("%Y-%m-%d %H:%M")
+        self.log_path = os.path.join(
+            HERE, "logs", f"hop_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
+        print("Phien hop moi (room trong qua lau, bien ban cu da luu trong logs/)")
 
     def log_final(self, entry):
         self.history.append(entry)
@@ -487,6 +497,14 @@ async def transcript():
                  f'attachment; filename="bien-ban-hop-{time.strftime("%Y%m%d-%H%M")}.md"'})
 
 
+@app.post("/new-session")
+async def new_session_endpoint():
+    """Bat dau cuoc hop moi: luu bien ban cu vao logs/, xoa man hinh moi may."""
+    ROOM.new_session()
+    await ROOM.broadcast({"type": "session_reset"})
+    return {"ok": True}
+
+
 @app.post("/summary")
 async def summary_endpoint():
     if not ROOM.history:
@@ -512,9 +530,18 @@ async def ws_endpoint(ws: WebSocket):
                 if data.get("type") == "join":
                     name = (data.get("name") or "khach").strip()[:20]
                     lang = data.get("lang") if data.get("lang") in ("vi", "en") else "vi"
+                    # room trong qua lau -> coi la cuoc hop moi
+                    if (not ROOM.clients and ROOM.empty_since
+                            and time.time() - ROOM.empty_since > Room.EMPTY_RESET_S):
+                        ROOM.new_session()
+                    ROOM.empty_since = None
                     client = Client(ws, name, lang)
                     ROOM.clients[ws] = client
                     await ROOM.broadcast({"type": "roster", "members": ROOM.roster()})
+                    # phat lai cac cau gan nhat de nguoi vao sau thay ngu canh
+                    for h in ROOM.history[-30:]:
+                        await ws.send_text(json.dumps(
+                            {"type": "final", **h}, ensure_ascii=False))
                     print(f"+ {name} ({lang}) vao room ({len(ROOM.clients)} nguoi)")
             elif msg.get("bytes") is not None and client is not None:
                 # client gui PCM int16 (tiet kiem 1 nua bang thong so voi float32)
@@ -528,6 +555,8 @@ async def ws_endpoint(ws: WebSocket):
         c = ROOM.clients.pop(ws, None)
         if c:
             print(f"- {c.name} roi room ({len(ROOM.clients)} nguoi)")
+            if not ROOM.clients:
+                ROOM.empty_since = time.time()
             await ROOM.broadcast({"type": "roster", "members": ROOM.roster()})
 
 
