@@ -1,5 +1,18 @@
 {
   "enabledPlugins": {
     "expo@claude-plugins-official": true
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/log-prompt.js\"",
+            "statusMessage": "Logging prompt to docs/AI_LOG.md"
+          }
+        ]
+      }
+    ]
   }
 }

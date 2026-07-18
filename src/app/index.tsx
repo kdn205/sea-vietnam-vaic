@@ -92,7 +92,9 @@ export default function HomeScreen() {
 
   const sessionRef = useRef<HostSession | JoinSession | null>(null);
   const scannedRef = useRef(false);
-  const deviceIdRef = useRef(`dev-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const deviceIdRef = useRef(
+    globalThis.crypto?.randomUUID ? `dev-${globalThis.crypto.randomUUID()}` : `dev-${Date.now()}`
+  );
 
   // ---- History + explain (Gemini) ---------------------------------------------------------
   // Past sessions are persisted via history-storage.ts and read directly by src/app/history.tsx
