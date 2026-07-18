@@ -254,6 +254,8 @@
       <option value="en">Read: English</option>
     </select>
   </div>
+  <button class="act" id="ttsbtn" onclick="toggleTTS()">
+    <span class="ic">🔊</span> <span id="ttslabel">Đọc bản dịch thành tiếng: TẮT</span></button>
   <div class="sh">CUỘC HỌP</div>
   <button class="act" onclick="closeSheet(); location.href='/transcript?room='+roomId">
     <span class="ic">📥</span> Tải biên bản song ngữ (.md)</button>
@@ -344,9 +346,35 @@ function enterMeeting() {
   location.hash = roomId;
   el('displang').value = localStorage.getItem('dispLang') || myLang;
   el('displang').onchange = () => localStorage.setItem('dispLang', el('displang').value);
+  el('ttslabel').textContent = 'Đọc bản dịch thành tiếng: ' + (ttsOn ? 'BẬT' : 'TẮT');
   toast('Đã vào phòng ' + roomId + ' 🎉');
   keepAwake();
   fillMics();
+}
+
+/* ---------- TTS: doc ban dich bang giong noi cua dien thoai (offline) ---------- */
+let ttsOn = localStorage.getItem('ttsOn') === '1';
+
+function toggleTTS() {
+  ttsOn = !ttsOn;
+  localStorage.setItem('ttsOn', ttsOn ? '1' : '0');
+  el('ttslabel').textContent = 'Đọc bản dịch thành tiếng: ' + (ttsOn ? 'BẬT' : 'TẮT');
+  if (ttsOn) {
+    speak('Đã bật đọc bản dịch', el('displang').value);
+    toast('🔊 Sẽ đọc to bản dịch của người khác nói');
+  } else {
+    speechSynthesis.cancel();
+  }
+}
+
+function speak(text, lang) {
+  if (!('speechSynthesis' in window)) return;
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = lang === 'vi' ? 'vi-VN' : 'en-US';
+  u.rate = 1.05;
+  // xep hang toi da 2 cau, qua thi bo cau cu de khong tut hau hoi thoai
+  if (speechSynthesis.pending) speechSynthesis.cancel();
+  speechSynthesis.speak(u);
 }
 
 function showQR() {
@@ -438,6 +466,9 @@ function handle(m) {
   const feed = el('feed');
   while (feed.children.length > 150) feed.removeChild(feed.firstChild);
   feed.scrollTop = feed.scrollHeight;
+
+  // doc to ban dich (chi cau chot cua NGUOI KHAC, theo ngon ngu doc cua minh)
+  if (ttsOn && m.type === 'final' && !mine) speak(mainText, dispLang);
 }
 
 /* ---------- Actions ---------- */
