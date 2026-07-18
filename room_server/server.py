@@ -15,6 +15,7 @@ import asyncio
 import json
 import os
 import queue
+import random
 import re
 import socket
 import sys
@@ -140,10 +141,11 @@ class Engines:
 # ----------------------------- Room state -----------------------------
 
 class Client:
-    def __init__(self, ws, name, lang):
+    def __init__(self, ws, name, lang, room=None):
         self.ws = ws
         self.name = name
         self.lang = lang            # "vi" | "en" (ngon ngu NGUOI NAY noi)
+        self.room = room            # Room ma client nay thuoc ve
         self.buf = []               # cac chunk cua cau dang noi
         self.preroll = []
         self.preroll_s = 0.0
@@ -163,18 +165,18 @@ class Client:
 
 
 class Room:
-    """Ket noi WS + hang doi xu ly. final khong bao gio bi bo, partial latest-wins."""
+    """Mot phong hop doc lap: thanh vien, hang doi xu ly, bien ban rieng."""
 
-    def __init__(self):
+    def __init__(self, rid="MAIN"):
+        self.id = rid
         self.clients = {}           # ws -> Client
         self.lock = threading.Lock()
         self.final_q = queue.Queue()
         self.partials = {}          # client name -> (audio, Client, utt)
-        self.loop = None            # asyncio loop (gan khi server start)
         self.history = []           # cac cau final da chot (bien ban hop)
         self.started = time.strftime("%Y-%m-%d %H:%M")
         self.log_path = os.path.join(
-            HERE, "logs", f"hop_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
+            HERE, "logs", f"hop_{rid}_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
         self.empty_since = None     # thoi diem room trong (de tu mo phien moi)
 
     EMPTY_RESET_S = 120  # room trong qua 2 phut -> cuoc hop moi, xoa bien ban cu
@@ -183,8 +185,8 @@ class Room:
         self.history = []
         self.started = time.strftime("%Y-%m-%d %H:%M")
         self.log_path = os.path.join(
-            HERE, "logs", f"hop_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
-        print("Phien hop moi (room trong qua lau, bien ban cu da luu trong logs/)")
+            HERE, "logs", f"hop_{self.id}_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
+        print(f"[{self.id}] Phien hop moi (bien ban cu da luu trong logs/)")
 
     def log_final(self, entry):
         self.history.append(entry)
@@ -218,15 +220,35 @@ class Room:
             self.clients.pop(ws, None)
 
     def broadcast_threadsafe(self, msg):
-        if self.loop:
-            asyncio.run_coroutine_threadsafe(self.broadcast(msg), self.loop)
+        if LOOP:
+            asyncio.run_coroutine_threadsafe(self.broadcast(msg), LOOP)
 
     def roster(self):
         return [{"name": c.name, "lang": c.lang} for c in self.clients.values()]
 
 
-ROOM = Room()
+ROOMS = {}                  # room_id -> Room
+LOOP = None                 # asyncio loop chinh (gan khi server start)
 ENGINES: Engines = None
+ROOM_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # bo ky tu de doc, khong nham lan
+
+
+def create_room():
+    while True:
+        rid = "".join(random.choices(ROOM_CHARS, k=5))
+        if rid not in ROOMS:
+            ROOMS[rid] = Room(rid)
+            print(f"[{rid}] Phong moi duoc tao")
+            return rid
+
+
+def gc_rooms():
+    """Don cac phong trong qua 1 gio."""
+    now = time.time()
+    for rid, r in list(ROOMS.items()):
+        if not r.clients and r.empty_since and now - r.empty_since > 3600:
+            del ROOMS[rid]
+            print(f"[{rid}] Phong bi don (trong qua lau)")
 
 
 # ----------------------------- VAD per client -----------------------------
@@ -249,9 +271,8 @@ def feed_audio(c: Client, chunk: np.ndarray):
     now = time.time()
     if now - c.last_level_t > 0.2:
         c.last_level_t = now
-        if ROOM.loop:
-            asyncio.run_coroutine_threadsafe(
-                _send_level(c, rms), ROOM.loop)
+        if LOOP:
+            asyncio.run_coroutine_threadsafe(_send_level(c, rms), LOOP)
 
     c.cur_ratio = 0.6 * c.cur_ratio + 0.4 * (rms / max(c.threshold, 1e-6))
 
@@ -264,7 +285,7 @@ def feed_audio(c: Client, chunk: np.ndarray):
         if rms > c.threshold:
             # cong "ai troi hon": neu co nguoi khac dang noi voi tin hieu manh
             # gap doi tro len -> day chi la giong ho lot sang mic minh, bo qua
-            others = [o.cur_ratio for o in ROOM.clients.values()
+            others = [o.cur_ratio for o in c.room.clients.values()
                       if o is not c and o.speaking]
             if others and c.cur_ratio < 0.5 * max(others):
                 return
@@ -282,8 +303,8 @@ def feed_audio(c: Client, chunk: np.ndarray):
 
         if c.since_partial_s >= PARTIAL_EVERY_S:
             c.since_partial_s = 0.0
-            with ROOM.lock:
-                ROOM.partials[c.name] = (np.concatenate(c.buf), c, c.utt)
+            with c.room.lock:
+                c.room.partials[c.name] = (np.concatenate(c.buf), c, c.utt)
 
         if c.silence_s >= SILENCE_END_S or c.speech_s >= MAX_SPEECH_S:
             forced = c.speech_s >= MAX_SPEECH_S  # bi cat cuong buc giua chung
@@ -293,10 +314,10 @@ def feed_audio(c: Client, chunk: np.ndarray):
             cut = int(max(0.0, c.silence_s - 0.15) * SAMPLE_RATE)
             if 0 < cut < len(audio):
                 audio = audio[:-cut]
-            with ROOM.lock:
-                ROOM.partials.pop(c.name, None)
+            with c.room.lock:
+                c.room.partials.pop(c.name, None)
             if c.speech_s - c.silence_s >= MIN_SPEECH_S:
-                ROOM.final_q.put((audio, c, c.utt, forced))
+                c.room.final_q.put((audio, c, c.utt, forced))
             c.speaking = False
             c.buf, c.preroll, c.preroll_s = [], [], 0.0
 
@@ -325,22 +346,19 @@ def worker():
     last_final = {}     # client name -> cau chot gan nhat (de gop cau noi tiep)
     while True:
         jobs = []  # (kind, audio, client, utt, forced)
-        try:
-            audio, c, utt, forced = ROOM.final_q.get(timeout=0.05)
-            jobs.append(["final", audio, c, utt, forced])
-        except queue.Empty:
-            pass
-        while True:  # vet not cac final dang doi
-            try:
-                audio, c, utt, forced = ROOM.final_q.get_nowait()
-                jobs.append(["final", audio, c, utt, forced])
-            except queue.Empty:
-                break
-        with ROOM.lock:  # lay ban nhap moi nhat cua moi nguoi
-            for name in list(ROOM.partials):
-                audio, c, utt = ROOM.partials.pop(name)
-                jobs.append(["partial", audio, c, utt, False])
+        for room in list(ROOMS.values()):
+            while True:  # vet cac final dang doi cua tung phong
+                try:
+                    audio, c, utt, forced = room.final_q.get_nowait()
+                    jobs.append(["final", audio, c, utt, forced])
+                except queue.Empty:
+                    break
+            with room.lock:  # ban nhap moi nhat cua moi nguoi
+                for name in list(room.partials):
+                    audio, c, utt = room.partials.pop(name)
+                    jobs.append(["partial", audio, c, utt, False])
         if not jobs:
+            time.sleep(0.03)
             continue
         try:
             # --- ASR theo tung nhom ngon ngu, moi nhom 1 lan decode batch ---
@@ -363,10 +381,10 @@ def worker():
                 dur = round(len(audio) / SAMPLE_RATE, 1)
                 if not text or len(re.sub(r"[^\w]", "", text)) <= 1:
                     if kind == "final":
-                        ROOM.broadcast_threadsafe({"type": "drop", "id": f"{c.name}#{utt}"})
+                        c.room.broadcast_threadsafe({"type": "drop", "id": f"{c.name}#{utt}"})
                     continue
                 if kind == "partial":
-                    if last_partial.get(c.name) == text:
+                    if last_partial.get(f"{c.room.id}:{c.name}") == text:
                         continue
                     keep.append((kind, c, utt, text, f"{c.name}#{utt}", None, dur, False))
                     continue
@@ -375,19 +393,20 @@ def worker():
                 # -> GIU BAN TIN HIEU MANH HON (bat ke den truoc hay sau)
                 rms = float(np.sqrt(np.mean(audio ** 2)))
                 dup = next((r for r in recent_finals
-                            if r[1] != c.name and _too_similar(r[2], text)), None)
+                            if r[5] == c.room.id and r[1] != c.name
+                            and _too_similar(r[2], text)), None)
                 if dup is not None:
                     if rms <= dup[3]:
-                        ROOM.broadcast_threadsafe(
+                        c.room.broadcast_threadsafe(
                             {"type": "drop", "id": f"{c.name}#{utt}"})
                         continue
-                    ROOM.broadcast_threadsafe({"type": "drop", "id": dup[4]})
-                    ROOM.remove_final(dup[4])
+                    c.room.broadcast_threadsafe({"type": "drop", "id": dup[4]})
+                    c.room.remove_final(dup[4])
                     recent_finals.remove(dup)
 
                 # GOP: cung nguoi noi tiep ngay (hoac cau truoc bi cat cuong buc)
                 # -> noi vao cau truoc va DICH LAI toan bo de giu ngu canh
-                lf = last_final.get(c.name)
+                lf = last_final.get(f"{c.room.id}:{c.name}")
                 merged = (lf is not None
                           and (now - lf["t"] <= MERGE_WINDOW_S or lf["forced"])
                           and len((lf["text"] + " " + text).split()) <= MERGE_MAX_WORDS)
@@ -396,7 +415,7 @@ def worker():
                     drop_id, out_dur = f"{c.name}#{utt}", round(lf["dur"] + dur, 1)
                 else:
                     out_id, out_text, drop_id, out_dur = f"{c.name}#{utt}", text, None, dur
-                recent_finals.append((now, c.name, out_text, rms, out_id))
+                recent_finals.append((now, c.name, out_text, rms, out_id, c.room.id))
                 keep.append((kind, c, utt, out_text, out_id, drop_id, out_dur, forced))
             if not keep:
                 continue
@@ -416,9 +435,9 @@ def worker():
             for (kind, c, utt, text, out_id, drop_id, dur, forced), translation \
                     in zip(keep, translations):
                 if kind == "partial":
-                    last_partial[c.name] = text
+                    last_partial[f"{c.room.id}:{c.name}"] = text
                 else:
-                    last_partial.pop(c.name, None)
+                    last_partial.pop(f"{c.room.id}:{c.name}", None)
                     entry = {
                         "id": out_id, "time": time.strftime("%H:%M:%S"),
                         "name": c.name, "lang": c.lang,
@@ -426,13 +445,13 @@ def worker():
                         "t_asr": t_asr, "t_mt": t_mt, "dur": dur,
                     }
                     # cau gop: cap nhat entry cu trong bien ban thay vi them moi
-                    if drop_id is None or not ROOM.update_final(out_id, **entry):
-                        ROOM.log_final(entry)
+                    if drop_id is None or not c.room.update_final(out_id, **entry):
+                        c.room.log_final(entry)
                     if drop_id:
-                        ROOM.broadcast_threadsafe({"type": "drop", "id": drop_id})
-                    last_final[c.name] = {"id": out_id, "text": text, "t": time.time(),
+                        c.room.broadcast_threadsafe({"type": "drop", "id": drop_id})
+                    last_final[f"{c.room.id}:{c.name}"] = {"id": out_id, "text": text, "t": time.time(),
                                           "dur": dur, "forced": forced}
-                ROOM.broadcast_threadsafe({
+                c.room.broadcast_threadsafe({
                     "type": kind, "id": out_id, "name": c.name,
                     "lang": c.lang, "text": text, "translation": translation,
                     "t_asr": t_asr, "t_mt": t_mt, "dur": dur,
@@ -447,13 +466,13 @@ _sum = {"model": None, "tok": None}
 _sum_lock = threading.Lock()
 
 
-def _load_summarizer():
+def _load_summarizer(room):
     if _sum["model"] is not None:
         return
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    ROOM.broadcast_threadsafe({"type": "sum_status",
+    room.broadcast_threadsafe({"type": "sum_status",
                                "text": "Đang nạp model tóm tắt (lần đầu ~20s)..."})
     tok = AutoTokenizer.from_pretrained(SUM_MODEL)
     try:
@@ -467,15 +486,15 @@ def _load_summarizer():
     _sum.update(model=model, tok=tok)
 
 
-def summarize_history():
+def summarize_history(room):
     """Tom tat bien ban bang LLM local (mot lan cuoi hop, khong can realtime)."""
     import torch
 
     with _sum_lock:
-        _load_summarizer()
+        _load_summarizer(room)
         lines = "\n".join(
             f"[{h['time']}] {h['name']} ({h['lang'].upper()}): {h['text']}"
-            for h in ROOM.history)
+            for h in room.history)
         messages = [
             {"role": "system", "content":
              "Bạn là thư ký cuộc họp kinh doanh song ngữ Việt-Anh. "
@@ -496,10 +515,10 @@ def summarize_history():
         return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True).strip()
 
 
-def build_transcript_md():
-    lines = [f"# Biên bản họp — {ROOM.started}",
-             f"Thành viên: {', '.join(sorted({h['name'] for h in ROOM.history}))}", ""]
-    for h in ROOM.history:
+def build_transcript_md(room):
+    lines = [f"# Biên bản họp — phòng {room.id} — {room.started}",
+             f"Thành viên: {', '.join(sorted({h['name'] for h in room.history}))}", ""]
+    for h in room.history:
         flag = "VN" if h["lang"] == "vi" else "EN"
         lines.append(f"**[{h['time']}] {h['name']} [{flag}]**: {h['text']}")
         lines.append(f"> {h['translation']}")
@@ -520,34 +539,55 @@ async def index():
     return FileResponse(os.path.join(HERE, "index.html"))
 
 
+@app.get("/manifest.json")
+async def manifest():
+    return {"name": "Room Dịch Họp", "short_name": "DịchHọp",
+            "start_url": "/", "display": "standalone",
+            "background_color": "#0b57d0", "theme_color": "#0b57d0",
+            "icons": [{"src": "/icon.svg", "sizes": "any", "type": "image/svg+xml"}]}
+
+
+@app.get("/icon.svg")
+async def icon():
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+           '<rect width="100" height="100" rx="22" fill="#0b57d0"/>'
+           '<text x="50" y="66" font-size="46" text-anchor="middle">🌐</text></svg>')
+    return Response(svg, media_type="image/svg+xml")
+
+
 @app.get("/transcript")
-async def transcript():
-    if not ROOM.history:
+async def transcript(room: str = ""):
+    r = ROOMS.get(room.strip().upper())
+    if r is None or not r.history:
         return Response("Chua co noi dung.", media_type="text/plain; charset=utf-8")
     return Response(
-        build_transcript_md(), media_type="text/markdown; charset=utf-8",
+        build_transcript_md(r), media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition":
-                 f'attachment; filename="bien-ban-hop-{time.strftime("%Y%m%d-%H%M")}.md"'})
+                 f'attachment; filename="bien-ban-{r.id}-{time.strftime("%Y%m%d-%H%M")}.md"'})
 
 
 @app.post("/new-session")
-async def new_session_endpoint():
+async def new_session_endpoint(room: str = ""):
     """Bat dau cuoc hop moi: luu bien ban cu vao logs/, xoa man hinh moi may."""
-    ROOM.new_session()
-    await ROOM.broadcast({"type": "session_reset"})
+    r = ROOMS.get(room.strip().upper())
+    if r is None:
+        return {"error": "Phòng không tồn tại."}
+    r.new_session()
+    await r.broadcast({"type": "session_reset"})
     return {"ok": True}
 
 
 @app.post("/summary")
-async def summary_endpoint():
-    if not ROOM.history:
+async def summary_endpoint(room: str = ""):
+    r = ROOMS.get(room.strip().upper())
+    if r is None or not r.history:
         return {"error": "Chưa có nội dung để tóm tắt."}
     try:
-        text = await asyncio.to_thread(summarize_history)
+        text = await asyncio.to_thread(summarize_history, r)
     except Exception as e:
         return {"error": f"Lỗi tóm tắt: {type(e).__name__}: {e}"}
-    await ROOM.broadcast({"type": "summary", "text": text,
-                          "time": time.strftime("%H:%M:%S")})
+    await r.broadcast({"type": "summary", "text": text,
+                       "time": time.strftime("%H:%M:%S")})
     return {"ok": True, "text": text}
 
 
@@ -563,19 +603,33 @@ async def ws_endpoint(ws: WebSocket):
                 if data.get("type") == "join":
                     name = (data.get("name") or "khach").strip()[:20]
                     lang = data.get("lang") if data.get("lang") in ("vi", "en") else "vi"
+                    gc_rooms()
+                    if data.get("create"):
+                        rid = create_room()
+                    else:
+                        rid = (data.get("room") or "").strip().upper()
+                    room = ROOMS.get(rid)
+                    if room is None:
+                        await ws.send_text(json.dumps(
+                            {"type": "error",
+                             "text": f"Phòng {rid or '?'} không tồn tại. Kiểm tra lại mã phòng."},
+                            ensure_ascii=False))
+                        continue
                     # room trong qua lau -> coi la cuoc hop moi
-                    if (not ROOM.clients and ROOM.empty_since
-                            and time.time() - ROOM.empty_since > Room.EMPTY_RESET_S):
-                        ROOM.new_session()
-                    ROOM.empty_since = None
-                    client = Client(ws, name, lang)
-                    ROOM.clients[ws] = client
-                    await ROOM.broadcast({"type": "roster", "members": ROOM.roster()})
+                    if (not room.clients and room.empty_since
+                            and time.time() - room.empty_since > Room.EMPTY_RESET_S):
+                        room.new_session()
+                    room.empty_since = None
+                    client = Client(ws, name, lang, room=room)
+                    room.clients[ws] = client
+                    await ws.send_text(json.dumps({"type": "joined", "room": rid},
+                                                  ensure_ascii=False))
+                    await room.broadcast({"type": "roster", "members": room.roster()})
                     # phat lai cac cau gan nhat de nguoi vao sau thay ngu canh
-                    for h in ROOM.history[-30:]:
+                    for h in room.history[-30:]:
                         await ws.send_text(json.dumps(
                             {"type": "final", **h}, ensure_ascii=False))
-                    print(f"+ {name} ({lang}) vao room ({len(ROOM.clients)} nguoi)")
+                    print(f"+ {name} ({lang}) vao phong {rid} ({len(room.clients)} nguoi)")
             elif msg.get("bytes") is not None and client is not None:
                 # client gui PCM int16 (tiet kiem 1 nua bang thong so voi float32)
                 chunk = np.frombuffer(msg["bytes"], dtype=np.int16).astype(np.float32) / 32768.0
@@ -585,17 +639,19 @@ async def ws_endpoint(ws: WebSocket):
     except WebSocketDisconnect:
         pass
     finally:
-        c = ROOM.clients.pop(ws, None)
-        if c:
-            print(f"- {c.name} roi room ({len(ROOM.clients)} nguoi)")
-            if not ROOM.clients:
-                ROOM.empty_since = time.time()
-            await ROOM.broadcast({"type": "roster", "members": ROOM.roster()})
+        if client is not None and client.room is not None:
+            room = client.room
+            room.clients.pop(ws, None)
+            print(f"- {client.name} roi phong {room.id} ({len(room.clients)} nguoi)")
+            if not room.clients:
+                room.empty_since = time.time()
+            await room.broadcast({"type": "roster", "members": room.roster()})
 
 
 @app.on_event("startup")
 async def startup():
-    ROOM.loop = asyncio.get_running_loop()
+    global LOOP
+    LOOP = asyncio.get_running_loop()
 
 
 def local_ips():

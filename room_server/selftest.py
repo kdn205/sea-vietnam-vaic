@@ -20,7 +20,7 @@ BENCH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "benchmar
 URL = sys.argv[1] if len(sys.argv) > 1 else "ws://localhost:8000/ws"
 
 
-async def phone(name, lang, file_ids, results):
+async def phone(name, lang, file_ids, results, code_future, is_creator=False):
     import websockets
 
     ssl_ctx = None
@@ -29,12 +29,21 @@ async def phone(name, lang, file_ids, results):
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
+    join = {"type": "join", "name": name, "lang": lang}
+    if is_creator:
+        join["create"] = True
+    else:
+        join["room"] = await code_future  # cho nguoi tao phong bao ma
+
     async with websockets.connect(URL, ssl=ssl_ctx, max_size=None) as ws:
-        await ws.send(json.dumps({"type": "join", "name": name, "lang": lang}))
+        await ws.send(json.dumps(join))
 
         async def listen():
             async for msg in ws:
                 m = json.loads(msg)
+                if m.get("type") == "joined" and is_creator:
+                    print(f"  Phong duoc tao: {m['room']}")
+                    code_future.set_result(m["room"])
                 if m.get("type") == "final":
                     results.append(m)
                 if m.get("type") in ("partial", "final") and name == "Giap":
@@ -67,10 +76,11 @@ async def main():
     results = []
     print("3 'dien thoai' NOI CUNG LUC: Giap (vi) + Sarah (en) + Nam (vi)\n")
     t0 = time.perf_counter()
+    code_future = asyncio.get_running_loop().create_future()
     await asyncio.gather(
-        phone("Giap", "vi", ["vi1", "vi4"], results),
-        phone("Sarah", "en", ["en3", "en4"], results),
-        phone("Nam", "vi", ["vi5", "vi6"], results),
+        phone("Giap", "vi", ["vi1", "vi4"], results, code_future, is_creator=True),
+        phone("Sarah", "en", ["en3", "en4"], results, code_future),
+        phone("Nam", "vi", ["vi5", "vi6"], results, code_future),
     )
     # moi nguoi noi 2 cau lien tiep -> server GOP thanh 1 bubble co du noi dung
     latest = {}

@@ -18,7 +18,7 @@ BENCH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "benchmar
 URL = sys.argv[1] if len(sys.argv) > 1 else "wss://localhost:8443/ws"
 
 
-async def phone(name, lang, audio, results):
+async def phone(name, lang, audio, results, code_future, is_creator=False):
     import websockets
 
     ssl_ctx = None
@@ -27,12 +27,20 @@ async def phone(name, lang, audio, results):
         ssl_ctx.check_hostname = False
         ssl_ctx.verify_mode = ssl.CERT_NONE
 
+    join = {"type": "join", "name": name, "lang": lang}
+    if is_creator:
+        join["create"] = True
+    else:
+        join["room"] = await code_future
+
     async with websockets.connect(URL, ssl=ssl_ctx, max_size=None) as ws:
-        await ws.send(json.dumps({"type": "join", "name": name, "lang": lang}))
+        await ws.send(json.dumps(join))
 
         async def listen():
             async for msg in ws:
                 m = json.loads(msg)
+                if m.get("type") == "joined" and is_creator:
+                    code_future.set_result(m["room"])
                 if m.get("type") in ("final", "drop"):
                     results.append(m)
 
@@ -54,9 +62,10 @@ async def main():
     audio = load_audio(os.path.join(BENCH, "audio", "vi4.mp3"))
     results = []
     print("A (chinh chu, 100% am luong) + B (ngoi canh, nghe ke 8%)\n")
+    code_future = asyncio.get_running_loop().create_future()
     await asyncio.gather(
-        phone("A_chinh_chu", "vi", audio, results),
-        phone("B_ngoi_canh", "vi", audio * 0.08, results),
+        phone("A_chinh_chu", "vi", audio, results, code_future, is_creator=True),
+        phone("B_ngoi_canh", "vi", audio * 0.08, results, code_future),
     )
     # mo phong man hinh client: final tao bubble, drop xoa bubble
     screen = {}
