@@ -1,60 +1,102 @@
-<<<<<<< HEAD
-# Welcome to your Expo app 👋
+# appdichmobile — Trình Dịch Hội Thoại VI-EN Thời Gian Thực
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Ứng dụng di động cho phiên dịch và chép lời song ngữ Anh-Việt thời gian thực, dành cho các cuộc họp trực tiếp. Nhận dạng giọng nói và dịch thuật đều chạy trên thiết bị, không cần internet cho chức năng chính.
 
-## Get started
+Xem [PROJECT.md](./PROJECT.md) để biết thêm chi tiết về kiến trúc và kỹ thuật.
 
-1. Install dependencies
+## Tải Xuống
 
-   ```bash
-   npm install
-   ```
+- **APK (Android):** [Tải xuống phiên bản mới nhất](https://expo.dev/artifacts/eas/7Ze1h-rm8cqCMlizEtUtkLkcSJR6Jo_6KLRhLV98p6I.apk)
 
-2. Start the app
+## Hướng Dẫn Sử Dụng
 
-   ```bash
-   npx expo start
-   ```
+### Bắt Đầu
 
-In the output, you'll find options to open the app in a
+1. **Mở ứng dụng**, bạn sẽ thấy màn hình nhập tên và 3 lựa chọn chế độ.
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+2. **Nhập tên hiển thị** (không bắt buộc) — tên này sẽ xuất hiện trên caption của bạn.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+### Chế Độ Sử Dụng
 
-## Get a fresh project
+| Chế độ | Khi nào dùng | Cách dùng |
+|--------|--------------|-----------|
+| **Một mình (Solo)** | Một người dùng một máy | Bấm "Dùng một mình" → bấm **Start listening** → nói → xem caption + bản dịch |
+| **Tạo phòng (Host)** | Bạn mở phiên họp, người khác tham gia qua WiFi | Bấm "Tạo phòng (Host)" → QR code hiện ra → người khác quét mã để vào → bấm "Bắt đầu" |
+| **Tham gia (Join)** | Bạn tham gia vào phòng của người khác | Bấm "Tham gia (Join)" → quét mã QR của Host → bấm "Xin phát biểu" → chờ Host duyệt → nói |
 
-When you're ready, run:
+### Luồng Hội Thoại
+
+- **Start listening** — Bấm nút để bắt đầu nghe. Giọng nói được nhận dạng và dịch tự động.
+- **Stop** — Bấm để dừng nghe.
+- **Caption** — Mỗi câu nói hoàn chỉnh hiển thị: người nói → ngôn ngữ gốc → bản dịch.
+- **Bản nháp** — Trong khi bạn nói, bản dịch nháp xuất hiện ngay dưới dạng in nghiêng, cập nhật theo thời gian thực.
+
+### Tinh Chỉnh
+
+- **Thanh trượt độ nhạy mic** — Kéo lên để bắt được giọng nhỏ (phòng yên tĩnh), kéo xuống để lọc tạp âm (phòng ồn). Nếu câu nói bị bỏ sót, hãy kéo lên và nói to hơn.
+
+### Gemini API (Tùy Chọn)
+
+Hai tính năng cần kết nối Gemini:
+
+- **Giải thích** — Chọn một đoạn text trong caption → bấm "Giải thích" để xem giải nghĩa tiếng Việt.
+- **Tóm tắt phiên** — Khi kết thúc phiên, transcript được tóm tắt tự động.
+
+**Cách bật:**
+1. Bấm nút **API key** trên thanh công cụ.
+2. Bật công tắc đồng ý chia sẻ dữ liệu với Gemini.
+3. Nhập địa chỉ server proxy (quét QR từ terminal khi chạy `npm run server`, hoặc nhập tay).
+4. Bấm **Lưu**.
+
+> **Lưu ý:** Hai tính năng này là tùy chọn. Chức năng nghe và dịch chính vẫn chạy hoàn toàn ngoại tuyến, không cần Gemini.
+
+### Lịch Sử
+
+- Bấm **Lịch sử** để xem lại các phiên trước đó.
+- Vuốt để xoá phiên cũ.
+
+## Thông Tin Nhóm
+
+**Tên nhóm:** SEA VIET NAM
+
+| Thành viên | Email |
+|------------|-------|
+| Nguyễn Trọng Minh | tminh193.bil@gmail.com |
+| Nguyễn Văn Hoàng | hoangnguyen.bin02@gmail.com |
+| Đàm Xuân Giáp | damgiap9999@gmail.com |
+| Hoàng Phúc Quân | hoangphucquan2004@gmail.com |
+| Cao Thị Thu Trang | caothutrang11072004@gmail.com |
+| Nguyễn Duy Khánh | khanhnguyen22011@gmail.com |
+
+## Phát Triển (Developer)
+
+### Cài Đặt & Chạy
 
 ```bash
-npm run reset-project
+# Cài đặt dependencies
+npm install
+
+# Chạy ứng dụng
+npm start           # Expo dev server
+npm run android     # Android
+npm run ios         # iOS
+npm run web         # Web
+
+# Chạy Gemini proxy server (tùy chọn)
+npm run server
+# hoặc chạy cả hai cùng lúc:
+npm run dev:all
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Công Nghệ
 
-### Other setup steps
+- **Framework:** React Native / Expo 57
+- **Nhận dạng giọng nói:** expo-speech-recognition (thiết bị gốc)
+- **Dịch thuật:** expo-translate-text (ML Kit, trên thiết bị)
+- **Mạng ngang hàng:** react-native-tcp-socket (LAN)
+- **Lưu trữ:** AsyncStorage
+- **AI (tùy chọn):** Google Gemini 2.0 Flash
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+---
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-=======
-# sea-vietnam-vaic
->>>>>>> origin2/main
+Dự án tham gia **Vietnam AI Challenge 2026** — hạng mục Trình dịch hội thoại thời gian thực do **AI Singapore** tài trợ.
