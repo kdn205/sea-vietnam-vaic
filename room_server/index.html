@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Room dịch họp</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body { font-family: system-ui, sans-serif; background: #f0f2f5; height: 100dvh;
+         display: flex; flex-direction: column; }
+  header { background: #1a73e8; color: #fff; padding: 10px 14px; display: flex;
+           justify-content: space-between; align-items: center; }
+  header .title { font-weight: 700; }
+  header .roster { font-size: 12px; opacity: .9; }
+  #feed { flex: 1; overflow-y: auto; padding: 12px; }
+  .bubble { background: #fff; border-radius: 12px; padding: 10px 12px; margin-bottom: 10px;
+            box-shadow: 0 1px 2px rgba(0,0,0,.08); max-width: 720px; }
+  .bubble.mine { border-left: 4px solid #1a73e8; }
+  .bubble.partial { opacity: .55; font-style: italic; }
+  .meta { font-size: 11px; color: #888; margin-bottom: 4px; }
+  .main { font-size: 17px; font-weight: 600; color: #111; }
+  .sub  { font-size: 13px; color: #666; margin-top: 3px; }
+  footer { padding: 10px; background: #fff; border-top: 1px solid #ddd; }
+  .row { display: flex; gap: 8px; }
+  input, select, button { font-size: 16px; padding: 10px; border: 1px solid #ccc;
+                          border-radius: 8px; }
+  input { flex: 1; }
+  button { background: #1a73e8; color: #fff; border: none; font-weight: 700; }
+  button.rec { background: #d93025; }
+  #joinbox { position: fixed; inset: 0; background: #f0f2f5; display: flex;
+             flex-direction: column; justify-content: center; padding: 24px; gap: 12px; }
+  #joinbox h2 { color: #1a73e8; }
+  #status { font-size: 12px; color: #888; padding: 4px 14px; }
+  .level { height: 4px; background: #e0e0e0; border-radius: 2px; overflow: hidden; }
+  .level > div { height: 100%; width: 0; background: #34a853; transition: width .1s; }
+</style>
+</head>
+<body>
+<div id="joinbox">
+  <h2>Room dịch họp Việt–Anh</h2>
+  <input id="name" placeholder="Tên của bạn / Your name" maxlength="20">
+  <select id="lang">
+    <option value="vi">Tôi nói tiếng Việt</option>
+    <option value="en">I speak English</option>
+  </select>
+  <button onclick="join()">Vào room / Join</button>
+  <div id="joinerr" style="color:#d93025"></div>
+</div>
+
+<div id="microw" style="display:none; padding:6px 10px; background:#fff; border-bottom:1px solid #eee; font-size:14px">
+  🎙 Mic: <select id="micsel" style="max-width:55%; font-size:14px; padding:4px"></select>
+  &nbsp; 👁 Đọc bằng: <select id="displang" style="font-size:14px; padding:4px">
+    <option value="vi">Tiếng Việt</option>
+    <option value="en">English</option>
+  </select>
+</div>
+<header style="display:none" id="hdr">
+  <div>
+    <div class="title">Room dịch họp</div>
+    <div class="roster" id="roster"></div>
+  </div>
+  <button id="micbtn" onclick="toggleMic()">🎙 Nói</button>
+</header>
+<div class="level"><div id="lvl"></div></div>
+<div id="feed" style="display:none"></div>
+<div id="status"></div>
+
+<script>
+let ws, ctx, node, stream, myName, myLang, micOn = false, maxPeak = 0, micStartT = 0, micDead = false;
+
+async function fillMics() {
+  // xin quyen truoc de enumerateDevices tra ve ten thiet bi day du
+  try {
+    const tmp = await navigator.mediaDevices.getUserMedia({audio: true});
+    tmp.getTracks().forEach(t => t.stop());
+  } catch (e) { setStatus('Chưa được cấp quyền mic: ' + e.message); return; }
+  const devs = await navigator.mediaDevices.enumerateDevices();
+  const sel = el('micsel');
+  sel.innerHTML = '';
+  devs.filter(d => d.kind === 'audioinput').forEach((d, i) => {
+    const o = document.createElement('option');
+    o.value = d.deviceId;
+    o.textContent = d.label || ('Mic ' + (i + 1));
+    sel.appendChild(o);
+  });
+  const saved = localStorage.getItem('micId');
+  if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+  sel.onchange = async () => {
+    localStorage.setItem('micId', sel.value);
+    if (micOn) { await toggleMic(); await toggleMic(); }  // khoi dong lai stream voi mic moi
+  };
+}
+
+function el(id) { return document.getElementById(id); }
+function setStatus(t) { el('status').textContent = t; }
+
+function join() {
+  myName = el('name').value.trim() || 'khach';
+  myLang = el('lang').value;
+  ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    ws.send(JSON.stringify({type: 'join', name: myName, lang: myLang}));
+    el('joinbox').style.display = 'none';
+    el('hdr').style.display = 'flex';
+    el('microw').style.display = 'block';
+    el('feed').style.display = 'block';
+    // mac dinh doc bang ngon ngu minh noi; doi duoc bat cu luc nao
+    el('displang').value = localStorage.getItem('dispLang') || myLang;
+    el('displang').onchange = () => localStorage.setItem('dispLang', el('displang').value);
+    setStatus('Đã vào room. Bấm 🎙 để nói.');
+    fillMics();
+  };
+  ws.onmessage = e => handle(JSON.parse(e.data));
+  ws.onclose = () => setStatus('Mất kết nối — tải lại trang để vào lại.');
+  ws.onerror = () => { el('joinerr').textContent = 'Không kết nối được server.'; };
+}
+
+function handle(m) {
+  if (m.type === 'level') {
+    // ratio >= 1: server dang nghe thay giong; < 1: duoi nguong
+    const bar = el('lvl');
+    bar.style.width = Math.min(100, m.ratio * 33) + '%';
+    bar.style.background = m.ratio >= 1 ? '#34a853' : '#d93025';
+    // phan hoi tuc thi: server vua bat dau ghi giong minh
+    if (micDead) return;  // giu nguyen canh bao mic cam, khong de status de len
+    if (m.speaking) setStatus('🎤 Đang thu giọng bạn — bản dịch hiện dần bên trên...');
+    else if (micOn) setStatus('Đang nghe...');
+    return;
+  }
+  if (m.type === 'roster') {
+    el('roster').textContent = m.members.map(x => `${x.name} (${x.lang.toUpperCase()})`).join(' · ');
+    return;
+  }
+  if (m.type === 'drop') { const b = el(m.id); if (b) b.remove(); return; }
+  if (m.type !== 'partial' && m.type !== 'final') return;
+
+  let b = el(m.id);
+  if (!b) {
+    b = document.createElement('div');
+    b.id = m.id;
+    el('feed').appendChild(b);
+  }
+  b.className = 'bubble' + (m.name === myName ? ' mine' : '') + (m.type === 'partial' ? ' partial' : '');
+  // chu TO theo "ngon ngu doc" nguoi xem tu chon (khong phu thuoc ngon ngu noi)
+  const dispLang = el('displang').value;
+  const mainText = (m.lang === dispLang) ? m.text : m.translation;
+  const subText  = (m.lang === dispLang) ? m.translation : m.text;
+  const flag = m.lang === 'vi' ? 'VN' : 'EN';
+  const timing = m.type === 'final' ? ` · ${m.dur}s · ASR ${m.t_asr}s + MT ${m.t_mt}s` : ' · …';
+  b.innerHTML = `<div class="meta">${m.name} [${flag}]${timing}</div>` +
+                `<div class="main">${esc(mainText)}</div>` +
+                `<div class="sub">${esc(subText)}</div>`;
+  el('feed').scrollTop = el('feed').scrollHeight;
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+async function toggleMic() {
+  if (micOn) {
+    micOn = false;
+    el('micbtn').textContent = '🎙 Nói';
+    el('micbtn').classList.remove('rec');
+    if (node) node.disconnect();
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (ctx) ctx.close();
+    setStatus('Đã tắt mic.');
+    return;
+  }
+  try {
+    // echoCancellation tat: no chuyen xoa am thanh phat tu loa cung may
+    // (lam hong test mo audio qua loa); autoGainControl bu mic yeu
+    const micId = el('micsel').value;
+    const cons = {echoCancellation: false, noiseSuppression: false, autoGainControl: true};
+    if (micId) cons.deviceId = {exact: micId};
+    stream = await navigator.mediaDevices.getUserMedia({audio: cons});
+  } catch (err) {
+    setStatus('Không truy cập được mic: ' + err.message);
+    return;
+  }
+  maxPeak = 0; micStartT = Date.now(); micDead = false;
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  const src = ctx.createMediaStreamSource(stream);
+  node = ctx.createScriptProcessor(4096, 1, 1);
+  const ratio = ctx.sampleRate / 16000;
+  node.onaudioprocess = ev => {
+    if (!micOn || ws.readyState !== 1) return;
+    const inp = ev.inputBuffer.getChannelData(0);
+    const out = new Float32Array(Math.floor(inp.length / ratio));
+    for (let i = 0; i < out.length; i++) {
+      out[i] = inp[Math.floor(i * ratio)];
+      const a = Math.abs(out[i]); if (a > maxPeak) maxPeak = a;
+    }
+    // canh bao mic cam: 3s ma tin hieu van ~0 -> mic nay chet, doi mic khac
+    if (Date.now() - micStartT > 3000 && maxPeak < 0.002) {
+      micDead = true;
+      setStatus('⚠ Mic này KHÔNG có tín hiệu — chọn mic khác ở menu "🎙 Mic" phía trên!');
+    } else if (micDead && maxPeak >= 0.002) {
+      micDead = false;
+      setStatus('Mic OK — đang nghe...');
+    }
+    ws.send(out.buffer);  // thanh level do server tinh va gui ve
+  };
+  src.connect(node);
+  node.connect(ctx.destination);
+  micOn = true;
+  el('micbtn').textContent = '⏸ Dừng';
+  el('micbtn').classList.add('rec');
+  setStatus('Đang nghe... cứ nói — chữ và bản dịch hiện DẦN ngay khi bạn đang nói (dòng mờ), dứt câu sẽ tự chốt đậm.');
+}
+</script>
+</body>
+</html>

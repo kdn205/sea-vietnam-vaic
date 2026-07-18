@@ -1,4 +1,7 @@
 ﻿venv/
-models/
+models/*
+!models/quantize_envit5.py
 __pycache__/
 *.pyc
+room_server/cert.pem
+room_server/key.pem

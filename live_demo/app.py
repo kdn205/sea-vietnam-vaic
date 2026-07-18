@@ -41,15 +41,19 @@ ASR_TURBO_MODEL = "deepdml/faster-whisper-large-v3-turbo-ct2"
 PHOWHISPER_REPO = "quocphu/PhoWhisper-ct2-FasterWhisper"
 MT_MODEL = "VietAI/envit5-translation"
 
-# cac lua chon model cho ban cuoi ("pho" = chi tieng Viet, tieng Anh dung whisper-small)
+ASR_BASE_MODEL = "Systran/faster-whisper-base"  # dung cho che do mobile (CPU)
+
+# cac lua chon model cho ban cuoi ("pho" = chi tieng Viet, tieng Anh dung model nhanh)
 ASR_CHOICES = {
     "whisper-small (nhanh, 2 chieu)":        ("hf", ASR_FAST_MODEL),
+    "PhoWhisper-base (mobile, nhe)":         ("pho", "PhoWhisper-base-ct2-fasterWhisper"),
     "PhoWhisper-small (giong Viet)":         ("pho", "PhoWhisper-small-ct2-fasterWhisper"),
     "PhoWhisper-medium (giong Viet, manh)":  ("pho", "PhoWhisper-medium-ct2-fasterWhisper"),
     "large-v3-turbo (chinh xac, cham)":      ("hf", ASR_TURBO_MODEL),
 }
 ASR_FLAG_MAP = {  # anh xa co --asr cu sang lua chon moi
     "small": "whisper-small (nhanh, 2 chieu)",
+    "phowhisper-base": "PhoWhisper-base (mobile, nhe)",
     "phowhisper": "PhoWhisper-small (giong Viet)",
     "phowhisper-medium": "PhoWhisper-medium (giong Viet, manh)",
     "turbo": "large-v3-turbo (chinh xac, cham)",
@@ -69,24 +73,27 @@ def normalize(audio):
 # ----------------------------- Model -----------------------------
 
 class Translator:
-    def __init__(self, status_cb=print, asr_choice=None):
-        """asr_choice: mot key trong ASR_CHOICES (None = whisper-small)."""
+    def __init__(self, status_cb=print, asr_choice=None, mobile=False):
+        """asr_choice: key trong ASR_CHOICES. mobile=True: ep CPU + model base
+        (mo phong dung toc do se co tren dien thoai)."""
         from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.mobile = mobile
+        self.fast_model_path = ASR_BASE_MODEL if mobile else ASR_FAST_MODEL
+        self.device = "cpu" if mobile else ("cuda" if torch.cuda.is_available() else "cpu")
         self._ct = "int8_float16" if self.device == "cuda" else "int8"
         self._asr_cache = {}
         self._lock = threading.Lock()
 
         try:
-            self.asr_fast = self._load_asr("hf", ASR_FAST_MODEL, status_cb)
+            self.asr_fast = self._load_asr("hf", self.fast_model_path, status_cb)
         except Exception:
             status_cb("GPU loi, chuyen sang CPU...")
             self.device, self._ct = "cpu", "int8"
-            self.asr_fast = self._load_asr("hf", ASR_FAST_MODEL, status_cb)
+            self.asr_fast = self._load_asr("hf", self.fast_model_path, status_cb)
 
         self.asr_vi_final = self.asr_en_final = self.asr_fast
-        if asr_choice and ASR_CHOICES[asr_choice][1] != ASR_FAST_MODEL:
+        if asr_choice and ASR_CHOICES[asr_choice][1] != self.fast_model_path:
             try:
                 self.set_final_model(asr_choice, status_cb)
             except Exception as e:
@@ -219,6 +226,30 @@ def list_input_devices():
     return devs
 
 
+def pick_best_device(devices, seconds=0.6):
+    """Quet nhanh cac mic, chon cai co tin hieu nen manh nhat.
+
+    Ly do: Windows co the dat mac dinh vao endpoint chet (vd 'Microphone'
+    rieng le trong khi mic that la 'Microphone Array').
+    """
+    import sounddevice as sd
+    best, best_rms = None, 0.0
+    for i, name in devices:
+        if "sound mapper" in name.lower():
+            continue  # mapper = tro ve mac dinh, khong thu them
+        try:
+            a = sd.rec(int(seconds * SAMPLE_RATE), samplerate=SAMPLE_RATE,
+                       channels=1, dtype="float32", device=i)
+            sd.wait()
+            rms = float(np.sqrt(np.mean(a ** 2)))
+        except Exception:
+            continue
+        if rms > best_rms:
+            best_rms, best = rms, (i, name)
+    # tin hieu nen < 1e-4 o moi mic nghia la tat ca deu cam -> tra None
+    return best if best_rms >= 1e-4 else None
+
+
 class MicSegmenter(threading.Thread):
     """Doc mic, cat cau theo khoang lang. Khi dang noi day ban nhap deu dan.
 
@@ -320,11 +351,12 @@ FLAG = {"vi": "VN", "en": "EN"}
 
 
 class App:
-    def __init__(self, asr_choice=None):
+    def __init__(self, asr_choice=None, mobile=False):
         import tkinter as tk
         from tkinter import scrolledtext, ttk
 
-        self.asr_choice = asr_choice or list(ASR_CHOICES)[1]  # mac dinh PhoWhisper-small
+        self.asr_choice = asr_choice or list(ASR_CHOICES)[2]  # mac dinh PhoWhisper-small
+        self.mobile = mobile
         self.tk = tk
         self.root = tk.Tk()
         self.root.title("Dich hop Viet-Anh real-time (demo hackathon)")
@@ -387,11 +419,17 @@ class App:
     # --- setup ---
     def load_models(self):
         self.translator = Translator(status_cb=lambda m: self.out_queue.put(("status", m)),
-                                     asr_choice=self.asr_choice)
+                                     asr_choice=self.asr_choice, mobile=self.mobile)
+        # tu chon mic co tin hieu (Windows co the dat mac dinh vao mic chet)
+        self.out_queue.put(("status", "Dang quet mic..."))
+        best = pick_best_device(self.devices)
+        if best:
+            self.out_queue.put(("autodev", best))
         self.mic = MicSegmenter(
             self.partial_q, self.final_q,
             level_cb=lambda r, t, s: self.out_queue.put(("level", r / max(t, 1e-6))),
-            status_cb=lambda m: self.out_queue.put(("status", m)))
+            status_cb=lambda m: self.out_queue.put(("status", m)),
+            device=best[0] if best else None)
         self.mic.start()
         threading.Thread(target=self.worker, daemon=True).start()
         self.out_queue.put(("ready", None))
@@ -477,6 +515,10 @@ class App:
                     self.btn.config(state="normal")
                 elif kind == "model_done":
                     self.model_box.config(state="readonly")
+                elif kind == "autodev":
+                    idx, name = data
+                    self.dev_var.set(f"[{idx}] {name}")
+                    self.status.set(f"Tu chon mic: {name}")
                 elif kind == "level":
                     self.level["value"] = min(data, 3.0)
                 elif kind == "live":
@@ -533,7 +575,7 @@ class App:
 
 # ----------------------------- Selftest -----------------------------
 
-def selftest(asr_choice=None):
+def selftest(asr_choice=None, mobile=False):
     """Chay pipeline tren bo audio benchmark, khong can mic/GUI."""
     import json
 
@@ -541,7 +583,7 @@ def selftest(asr_choice=None):
     with open(os.path.join(bench, "testset.json"), encoding="utf-8") as f:
         testset = json.load(f)
 
-    tr = Translator(asr_choice=asr_choice)
+    tr = Translator(asr_choice=asr_choice, mobile=mobile)
     import av
 
     def load_audio(path):
@@ -585,9 +627,12 @@ if __name__ == "__main__":
     parser.add_argument("--selftest", action="store_true", help="test pipeline bang audio co san")
     parser.add_argument("--asr", choices=list(ASR_FLAG_MAP), default="phowhisper-medium",
                         help="model ASR khoi dong cho ban cuoi (doi duoc trong giao dien)")
+    parser.add_argument("--mobile", action="store_true",
+                        help="mo phong dien thoai: ep CPU, model base "
+                             "(whisper-base + PhoWhisper-base + envit5-ct2)")
     args = parser.parse_args()
-    choice = ASR_FLAG_MAP[args.asr]
+    choice = ASR_FLAG_MAP["phowhisper-base"] if args.mobile else ASR_FLAG_MAP[args.asr]
     if args.selftest:
-        selftest(asr_choice=choice)
+        selftest(asr_choice=choice, mobile=args.mobile)
     else:
-        App(asr_choice=choice).run()
+        App(asr_choice=choice, mobile=args.mobile).run()
