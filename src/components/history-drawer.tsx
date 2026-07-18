@@ -81,7 +81,7 @@ export function HistoryDrawer({ visible, sessions, onClose, onDelete }: Props) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       {visible && <TouchableOpacity style={styles.scrim} onPress={onClose} activeOpacity={1} />}
-      <Animated.View style={[styles.drawer, { backgroundColor: theme.background, transform: [{ translateX }] }]}>
+      <Animated.View style={[styles.drawer, { backgroundColor: theme.sidebarBackground, transform: [{ translateX }] }]}>
         <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <Text style={[styles.headerText, { color: theme.text }]}>{t('history')}</Text>
           <TouchableOpacity onPress={onClose} hitSlop={10}>

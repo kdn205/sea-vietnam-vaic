@@ -1,4 +1,3 @@
-import { SymbolView } from 'expo-symbols';
 import { useRef } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
@@ -17,6 +16,7 @@ export type ChatLogEntry = {
   source: string;
   translated: string;
   speaker?: string;
+  isHost?: boolean;
 };
 
 type Props = {
@@ -26,6 +26,7 @@ type Props = {
   partialText: string;
   draftTranslated: string;
   status: string;
+  isRunning: boolean;
   volumeLevel: SharedValue<number>;
   micSensitivity: number;
   onMicSensitivityChange: (value: number) => void;
@@ -39,6 +40,7 @@ export function SessionChatScreen({
   partialText,
   draftTranslated,
   status,
+  isRunning,
   volumeLevel,
   micSensitivity,
   onMicSensitivityChange,
@@ -59,16 +61,6 @@ export function SessionChatScreen({
         onChange={onChangeSessionTab}
       />
 
-      <View style={styles.langRow}>
-        <Text style={[styles.langText, { color: theme.text }]}>Tiếng Việt</Text>
-        <SymbolView
-          name={{ ios: 'arrow.left.arrow.right', android: 'swap_horiz', web: 'swap_horiz' }}
-          tintColor={theme.primary}
-          size={18}
-        />
-        <Text style={[styles.langText, { color: theme.text }]}>English</Text>
-      </View>
-
       <ScrollView
         ref={scrollRef}
         style={styles.scrollView}
@@ -78,7 +70,7 @@ export function SessionChatScreen({
           <ChatBubble key={entry.id} entry={entry} onExplain={onExplain} />
         ))}
         {partialText.length > 0 && (
-          <View style={[styles.partialCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.partialBlock}>
             <Text style={[styles.partialText, { color: theme.textSecondary }]}>{partialText}</Text>
             {draftTranslated.length > 0 && (
               <Text style={[styles.draftText, { color: theme.primary }]}>{draftTranslated}</Text>
@@ -88,7 +80,7 @@ export function SessionChatScreen({
       </ScrollView>
 
       <Text style={[styles.status, { color: theme.textSecondary }]}>{status}</Text>
-      <Waveform volume={volumeLevel} />
+      <Waveform volume={volumeLevel} isRunning={isRunning} />
 
       <Text style={[styles.sensitivityLabel, { color: theme.textSecondary }]}>
         {t('micSensitivity')} {Math.round(micSensitivity * 100)}%
@@ -103,23 +95,10 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
   },
-  langRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-  },
-  langText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
   scrollView: {
     flex: 1,
   },
-  partialCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
+  partialBlock: {
     gap: 4,
     marginBottom: 12,
   },

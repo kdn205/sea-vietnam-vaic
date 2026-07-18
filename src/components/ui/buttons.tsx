@@ -79,13 +79,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     paddingVertical: 14,
-    borderRadius: 14,
+    paddingHorizontal: 20,
+    borderRadius: 999,
   },
   outlined: {
-    borderWidth: 1.5,
+    borderWidth: 1,
   },
   label: {
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

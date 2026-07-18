@@ -24,7 +24,7 @@ export function SessionCard({
   const theme = useTheme();
 
   return (
-    <Pressable style={[styles.card, { borderColor: theme.border }]} onPress={onPress}>
+    <Pressable style={[styles.card, { backgroundColor: theme.card }]} onPress={onPress}>
       <View style={styles.left}>
         <Text style={[styles.title, { color: theme.text }]}>{session.title}</Text>
         <Text style={[styles.meta, { color: theme.textSecondary }]}>
@@ -71,7 +71,7 @@ export function SavedTranslationRow({
 }) {
   const theme = useTheme();
   return (
-    <View style={[styles.card, { borderColor: theme.border }]}>
+    <View style={[styles.card, { backgroundColor: theme.card }]}>
       <View style={styles.left}>
         <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
         <Text style={[styles.meta, { color: theme.textSecondary }]}>
@@ -93,7 +93,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    marginBottom: 4,
   },
   left: {
     flex: 1,

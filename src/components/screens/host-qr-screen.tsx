@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { DarkModeToggle } from '@/components/ui/header-controls';
 import { HintBanner } from '@/components/ui/hint-banner';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
@@ -30,7 +31,7 @@ export function HostQrScreen({ host, port, peerCount, onStart, onCancel }: Props
           />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.primary }]}>{t('shareQrTitle')}</Text>
-        <View style={styles.backButton} />
+        <DarkModeToggle />
       </View>
 
       <Text style={[styles.instruction, { color: theme.text }]}>{t('shareQrInstruction')}</Text>

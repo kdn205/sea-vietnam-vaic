@@ -21,7 +21,7 @@ export function ParticipantRow({ name, isPresenter, isYou, presenterLabel, langL
     <View style={[styles.row, { borderColor: theme.border }]}>
       <Avatar name={name} size={36} />
       <View style={styles.nameColumn}>
-        <Text style={[styles.name, { color: theme.text }]}>
+        <Text style={[styles.name, { color: isPresenter ? theme.hostName : theme.participantName }]}>
           {name}
           {isYou ? ` (${youLabel})` : ''}
         </Text>

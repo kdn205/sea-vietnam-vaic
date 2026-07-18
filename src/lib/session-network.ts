@@ -6,6 +6,7 @@ export type CaptionMessage = {
   kind: 'caption';
   id: string;
   speaker: string;
+  isHost: boolean;
   sourceLang: Lang;
   targetLang: Lang;
   source: string;
@@ -30,11 +31,17 @@ export type SpeakDecisionMessage = {
   approved: boolean;
 };
 
+/** Broadcast by the host when they end the meeting for everyone. */
+export type EndMeetingMessage = {
+  kind: 'end-meeting';
+};
+
 export type NetMessage =
   | CaptionMessage
   | HelloMessage
   | RequestSpeakMessage
-  | SpeakDecisionMessage;
+  | SpeakDecisionMessage
+  | EndMeetingMessage;
 
 export const SESSION_PORT = 8288;
 
@@ -52,8 +59,8 @@ function makeLineFeed(onMessage: (msg: NetMessage) => void) {
       if (!line.trim()) continue;
       try {
         onMessage(JSON.parse(line) as NetMessage);
-      } catch (err) {
-        console.log(`[Session] malformed line ignored: "${line}" (${err})`);
+      } catch {
+        // Malformed/partial line - ignore.
       }
     }
   };
@@ -82,7 +89,6 @@ export function startHost(
   const deviceBySocket = new Map<TcpSocketInstance, string>();
 
   const server = TcpSocket.createServer((socket) => {
-    console.log(`[Session:Host] peer connected (${socket.remoteAddress}:${socket.remotePort})`);
     sockets.add(socket);
     onPeerCountChange(sockets.size);
 
@@ -92,27 +98,22 @@ export function startHost(
         deviceBySocket.set(socket, msg.deviceId);
       }
       const fromDeviceId = deviceBySocket.get(socket) ?? null;
-      console.log(`[Session:Host] received from ${fromDeviceId ?? 'unknown'}: ${JSON.stringify(msg)}`);
       onMessage(msg, fromDeviceId);
 
       // Only captions get fanned out to everyone else; speak requests/decisions are handled
       // by the host directly (sendTo) rather than broadcast.
       if (msg.kind === 'caption') {
         const line = `${JSON.stringify(msg)}\n`;
-        let relayedTo = 0;
         for (const other of sockets) {
           if (other !== socket) {
             other.write(line);
-            relayedTo++;
           }
         }
-        console.log(`[Session:Host] relayed caption to ${relayedTo} other peer(s)`);
       }
     });
 
     socket.on('data', (data) => feed(data.toString()));
     socket.on('close', () => {
-      console.log('[Session:Host] peer disconnected');
       sockets.delete(socket);
       const deviceId = deviceBySocket.get(socket);
       if (deviceId) {
@@ -121,34 +122,26 @@ export function startHost(
       }
       onPeerCountChange(sockets.size);
     });
-    socket.on('error', (err) => {
-      console.log(`[Session:Host] peer socket error: ${err.message}`);
+    socket.on('error', () => {
       sockets.delete(socket);
       onPeerCountChange(sockets.size);
     });
   });
 
   server.on('error', (err) => {
-    console.log(`[Session:Host] server error: ${err.message}`);
     onError(err);
   });
-  server.listen({ port: SESSION_PORT, host: '0.0.0.0' }, () => {
-    console.log(`[Session:Host] listening on 0.0.0.0:${SESSION_PORT}`);
-  });
+  server.listen({ port: SESSION_PORT, host: '0.0.0.0' });
 
   return {
     port: SESSION_PORT,
     broadcast: (msg) => {
       const line = `${JSON.stringify(msg)}\n`;
-      console.log(`[Session:Host] broadcasting to ${sockets.size} peer(s): ${JSON.stringify(msg)}`);
       for (const socket of sockets) socket.write(line);
     },
     sendTo: (deviceId, msg) => {
       const socket = socketByDevice.get(deviceId);
-      if (!socket) {
-        console.log(`[Session:Host] sendTo: unknown deviceId ${deviceId}`);
-        return;
-      }
+      if (!socket) return;
       socket.write(`${JSON.stringify(msg)}\n`);
     },
     close: () => {
@@ -173,29 +166,23 @@ export function joinHost(
     onDisconnect: (error?: Error) => void;
   }
 ): JoinSession {
-  console.log(`[Session:Join] connecting to ${host}:${port}...`);
   const socket = TcpSocket.createConnection({ port, host }, () => {
-    console.log('[Session:Join] connected to host');
     callbacks.onConnected();
   });
 
   const feed = makeLineFeed((msg) => {
-    console.log(`[Session:Join] received from host: ${JSON.stringify(msg)}`);
     callbacks.onMessage(msg);
   });
   socket.on('data', (data) => feed(data.toString()));
   socket.on('close', () => {
-    console.log('[Session:Join] connection closed');
     callbacks.onDisconnect();
   });
   socket.on('error', (err) => {
-    console.log(`[Session:Join] connection error: ${err.message}`);
     callbacks.onDisconnect(err);
   });
 
   return {
     send: (msg) => {
-      console.log(`[Session:Join] sending to host: ${JSON.stringify(msg)}`);
       socket.write(`${JSON.stringify(msg)}\n`);
     },
     close: () => {

@@ -3,6 +3,7 @@ import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { DarkModeToggle } from '@/components/ui/header-controls';
 import { HintBanner } from '@/components/ui/hint-banner';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
@@ -31,7 +32,7 @@ export function JoinQrScreen({ onBack, onScanned, statusMessage }: Props) {
           />
         </Pressable>
         <Text style={[styles.headerTitle, { color: theme.primary }]}>{t('joinWithQr')}</Text>
-        <View style={styles.backButton} />
+        <DarkModeToggle />
       </View>
 
       <Text style={[styles.instruction, { color: theme.text }]}>{t('scanQrInstruction')}</Text>

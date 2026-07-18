@@ -1,73 +1,21 @@
-import { SymbolView, type SymbolViewProps } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { Pressable, StyleSheet, View } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
 
-function ControlButton({
-  icon,
-  label,
-  onPress,
-  active,
-}: {
-  icon: SymbolViewProps['name'];
-  label: string;
-  onPress?: () => void;
-  active?: boolean;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable onPress={onPress} style={styles.smallButton}>
-      <SymbolView name={icon} tintColor={active ? theme.primary : theme.textSecondary} size={22} />
-      <Text style={[styles.smallLabel, { color: active ? theme.primary : theme.textSecondary }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
 type Props = {
   isRunning: boolean;
-  isMuted: boolean;
-  onToggleMute: () => void;
   onToggleRunning: () => void;
-  onToggleSpeaker: () => void;
-  speakerOn: boolean;
-  onTextSize: () => void;
   onMore: () => void;
-  muteLabel: string;
-  speakerLabel: string;
-  textSizeLabel: string;
   moreLabel: string;
 };
 
-export function ControlBar({
-  isRunning,
-  isMuted,
-  onToggleMute,
-  onToggleRunning,
-  onToggleSpeaker,
-  speakerOn,
-  onTextSize,
-  onMore,
-  muteLabel,
-  speakerLabel,
-  textSizeLabel,
-  moreLabel,
-}: Props) {
+export function ControlBar({ isRunning, onToggleRunning, onMore, moreLabel }: Props) {
   const theme = useTheme();
 
   return (
-    <View style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
-      <ControlButton
-        icon={{ ios: isMuted ? 'mic.slash.fill' : 'mic.fill', android: 'mic', web: 'mic' }}
-        label={muteLabel}
-        onPress={onToggleMute}
-        active={isMuted}
-      />
-      <ControlButton
-        icon={{ ios: 'speaker.wave.2.fill', android: 'volume_up', web: 'volume_up' }}
-        label={speakerLabel}
-        onPress={onToggleSpeaker}
-        active={speakerOn}
-      />
+    <View style={[styles.row, { backgroundColor: theme.card }]}>
+      <View style={styles.spacer} />
       <Pressable
         onPress={onToggleRunning}
         style={[styles.mainButton, { backgroundColor: theme.primary }]}
@@ -78,16 +26,13 @@ export function ControlBar({
           size={26}
         />
       </Pressable>
-      <ControlButton
-        icon={{ ios: 'textformat.size', android: 'format_size', web: 'format_size' }}
-        label={textSizeLabel}
-        onPress={onTextSize}
-      />
-      <ControlButton
-        icon={{ ios: 'ellipsis', android: 'more_horiz', web: 'more_horiz' }}
-        label={moreLabel}
-        onPress={onMore}
-      />
+      <Pressable onPress={onMore} style={styles.moreButton} hitSlop={10} accessibilityLabel={moreLabel}>
+        <SymbolView
+          name={{ ios: 'ellipsis', android: 'more_horiz', web: 'more_horiz' }}
+          tintColor={theme.textSecondary}
+          size={22}
+        />
+      </Pressable>
     </View>
   );
 }
@@ -98,28 +43,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 16,
     borderRadius: 28,
-    borderWidth: 1,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
+    shadowOpacity: 0.16,
+    shadowRadius: 16,
     elevation: 4,
   },
-  smallButton: {
-    alignItems: 'center',
-    gap: 4,
-    width: 56,
-  },
-  smallLabel: {
-    fontSize: 11,
-    fontWeight: '600',
+  spacer: {
+    width: 32,
   },
   mainButton: {
     width: 56,
     height: 56,
     borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreButton: {
+    width: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },

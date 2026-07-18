@@ -1,8 +1,8 @@
-import { SymbolView } from 'expo-symbols';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { HintBanner } from '@/components/ui/hint-banner';
 import { GhostButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { GradientSpark } from '@/components/ui/gradient-spark';
 import { HeaderControls } from '@/components/ui/header-controls';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
@@ -11,10 +11,8 @@ type Props = {
   nameInput: string;
   onNameChange: (name: string) => void;
   onJoinQr: () => void;
-  onJoinCode: () => void;
   onPresenter: () => void;
   onSolo: () => void;
-  onOpenHistory: () => void;
   statusMessage?: string;
 };
 
@@ -22,10 +20,8 @@ export function WelcomeScreen({
   nameInput,
   onNameChange,
   onJoinQr,
-  onJoinCode,
   onPresenter,
   onSolo,
-  onOpenHistory,
   statusMessage,
 }: Props) {
   const theme = useTheme();
@@ -33,18 +29,6 @@ export function WelcomeScreen({
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
-      <Pressable
-        style={[styles.historyIcon, { backgroundColor: theme.card, borderColor: theme.border }]}
-        onPress={onOpenHistory}
-        hitSlop={8}
-      >
-        <SymbolView
-          name={{ ios: 'clock', android: 'history', web: 'history' }}
-          tintColor={theme.textSecondary}
-          size={18}
-        />
-      </Pressable>
-
       <HeaderControls style={styles.headerControls} />
 
       <ScrollView
@@ -54,13 +38,7 @@ export function WelcomeScreen({
       <View style={styles.hero}>
         <View style={styles.logoStack}>
           <View style={[styles.logoHalo, { backgroundColor: theme.primarySoft }]} />
-          <View style={[styles.logoCircle, { backgroundColor: theme.primary }]}>
-            <SymbolView
-              name={{ ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' }}
-              tintColor="#FFFFFF"
-              size={34}
-            />
-          </View>
+          <GradientSpark size={48} />
         </View>
         <Text style={[styles.title, { color: theme.text }]}>{t('welcomeTitle')}</Text>
         <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{t('welcomeSubtitle')}</Text>
@@ -74,7 +52,7 @@ export function WelcomeScreen({
       />
 
       <TextInput
-        style={[styles.nameInput, { borderColor: theme.border, color: theme.text }]}
+        style={[styles.nameInput, { backgroundColor: theme.card, color: theme.text }]}
         value={nameInput}
         onChangeText={onNameChange}
         placeholder={t('displayName')}
@@ -86,11 +64,6 @@ export function WelcomeScreen({
           label={t('joinWithQr')}
           onPress={onJoinQr}
           icon={{ ios: 'qrcode.viewfinder', android: 'qr_code_scanner', web: 'qr_code_scanner' }}
-        />
-        <SecondaryButton
-          label={t('joinWithCode')}
-          onPress={onJoinCode}
-          icon={{ ios: 'square.grid.3x3.fill', android: 'dialpad', web: 'dialpad' }}
         />
 
         <View style={styles.dividerRow}>
@@ -140,13 +113,6 @@ const styles = StyleSheet.create({
     height: 108,
     borderRadius: 54,
   },
-  logoCircle: {
-    width: 76,
-    height: 76,
-    borderRadius: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   title: {
     fontSize: 28,
     fontWeight: '700',
@@ -157,10 +123,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   nameInput: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 24,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
     fontSize: 15,
   },
   buttonGroup: {
@@ -190,17 +155,5 @@ const styles = StyleSheet.create({
     top: 12,
     right: 16,
     zIndex: 1,
-  },
-  historyIcon: {
-    position: 'absolute',
-    top: 12,
-    left: 16,
-    zIndex: 1,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
 });

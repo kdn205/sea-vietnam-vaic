@@ -5,6 +5,33 @@ import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 import { useThemeMode } from '@/lib/theme-mode';
 
+type ToggleProps = {
+  style?: StyleProp<ViewStyle>;
+};
+
+/** Standalone dark-mode toggle, meant to sit in every screen's header (not just the home page). */
+export function DarkModeToggle({ style }: ToggleProps) {
+  const theme = useTheme();
+  const { scheme, toggleDarkMode } = useThemeMode();
+  const isDark = scheme === 'dark';
+
+  return (
+    <Pressable
+      onPress={toggleDarkMode}
+      hitSlop={8}
+      style={[styles.iconButton, { backgroundColor: theme.card, borderColor: theme.border }, style]}
+      accessibilityRole="button"
+      accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      <SymbolView
+        name={{ ios: isDark ? 'moon.fill' : 'sun.max.fill', android: isDark ? 'dark_mode' : 'light_mode', web: isDark ? 'dark_mode' : 'light_mode' }}
+        tintColor={theme.primary}
+        size={16}
+      />
+    </Pressable>
+  );
+}
+
 type Props = {
   style?: StyleProp<ViewStyle>;
 };
@@ -12,25 +39,11 @@ type Props = {
 /** Dark-mode toggle + VI/EN language switch, meant to sit together in a screen's top-right corner. */
 export function HeaderControls({ style }: Props) {
   const theme = useTheme();
-  const { scheme, toggleDarkMode } = useThemeMode();
   const { lang, setLang } = useI18n();
-  const isDark = scheme === 'dark';
 
   return (
     <View style={[styles.row, style]}>
-      <Pressable
-        onPress={toggleDarkMode}
-        hitSlop={8}
-        style={[styles.iconButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-        accessibilityRole="button"
-        accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-      >
-        <SymbolView
-          name={{ ios: isDark ? 'moon.fill' : 'sun.max.fill', android: isDark ? 'dark_mode' : 'light_mode', web: isDark ? 'dark_mode' : 'light_mode' }}
-          tintColor={theme.primary}
-          size={16}
-        />
-      </Pressable>
+      <DarkModeToggle />
 
       <Pressable
         onPress={() => setLang(lang === 'en' ? 'vi' : 'en')}

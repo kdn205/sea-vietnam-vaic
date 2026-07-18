@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SymbolView } from 'expo-symbols';
 
+import { GradientSpark } from '@/components/ui/gradient-spark';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 
@@ -39,11 +39,7 @@ export function ExplainPanel({ visible, selectedText, explanation, loading, erro
       >
         <View style={[styles.header, { borderBottomColor: theme.border }]}>
           <View style={styles.headerTitleRow}>
-            <SymbolView
-              name={{ ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' }}
-              tintColor={theme.primary}
-              size={17}
-            />
+            <GradientSpark size={17} />
             <Text style={[styles.headerText, { color: theme.text }]}>{t('explainTitle')}</Text>
           </View>
           <TouchableOpacity onPress={onClose} hitSlop={10}>
@@ -51,7 +47,7 @@ export function ExplainPanel({ visible, selectedText, explanation, loading, erro
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.body}>
-          <View style={[styles.quoteBox, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={[styles.quoteBox, { backgroundColor: theme.card }]}>
             <Text style={[styles.quoteText, { color: theme.textSecondary }]}>"{selectedText}"</Text>
           </View>
           {loading && <ActivityIndicator color={theme.primary} style={{ marginTop: 16 }} />}
@@ -105,9 +101,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   quoteBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 16,
+    padding: 12,
     marginBottom: 16,
   },
   quoteText: {

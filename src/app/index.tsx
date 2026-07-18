@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, ScrollView, Switch, Text, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, ScrollView, Switch, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
@@ -16,12 +16,12 @@ import { ExplainPanel } from '@/components/explain-panel';
 import { HistoryDrawer } from '@/components/history-drawer';
 import { SessionTopBar } from '@/components/session-top-bar';
 import { HostQrScreen } from '@/components/screens/host-qr-screen';
-import { JoinCodeScreen } from '@/components/screens/join-code-screen';
 import { JoinQrScreen } from '@/components/screens/join-qr-screen';
 import { SessionChatScreen } from '@/components/screens/session-chat-screen';
 import { SessionParticipantsScreen } from '@/components/screens/session-participants-screen';
 import { WelcomeScreen } from '@/components/screens/welcome-screen';
 import { GhostButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { VersionBadge } from '@/components/ui/version-badge';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -64,6 +64,7 @@ type Lang = 'en' | 'vi';
 type LogEntry = {
   id: string;
   speaker: string;
+  isHost: boolean;
   sourceLang: Lang;
   targetLang: Lang;
   source: string;
@@ -71,7 +72,7 @@ type LogEntry = {
 };
 
 type Role = 'solo' | 'host' | 'join';
-type SetupStep = 'select' | 'host-qr' | 'join-scan' | 'join-code';
+type SetupStep = 'select' | 'host-qr' | 'join-scan';
 type SessionTab = 'chat' | 'participants';
 
 export default function HomeScreen() {
@@ -104,6 +105,11 @@ export default function HomeScreen() {
   const [explainResult, setExplainResult] = useState<string | null>(null);
   const [explainLoading, setExplainLoading] = useState(false);
   const [explainError, setExplainError] = useState<string | null>(null);
+  // Shown to everyone (host included) once the host ends the meeting - lets each device
+  // decide independently whether to keep its own copy of the transcript, and whether to
+  // spend a Gemini call turning it into a summary before saving.
+  const [endMeetingPromptVisible, setEndMeetingPromptVisible] = useState(false);
+  const [saveAsSummaryChecked, setSaveAsSummaryChecked] = useState(false);
   // Gemini is always reached via the small shared proxy server (see /server), which holds
   // one Gemini key server-side - the app itself never handles a raw key. Requires explicit
   // consent since the transcript/selection gets sent through it to Google.
@@ -133,8 +139,6 @@ export default function HomeScreen() {
 
   // ---- Presentation-only UI state (no effect on the pipeline above) ----------------------
   const [sessionTab, setSessionTab] = useState<SessionTab>('chat');
-  const [isMuted, setIsMuted] = useState(false);
-  const [speakerOn, setSpeakerOn] = useState(true);
 
   const isRunningRef = useRef(false);
   const useOnDeviceRef = useRef(true);
@@ -193,13 +197,24 @@ export default function HomeScreen() {
       // never attempt the on-device path at all if it's not there.
       const supportsOnDevice = ExpoSpeechRecognitionModule.supportsOnDeviceRecognition();
       useOnDeviceRef.current = supportsOnDevice;
-      console.log(`[LiveTranslate] supportsOnDeviceRecognition() = ${supportsOnDevice}`);
 
-      for (const locale of ['en-US', 'vi-VN']) {
-        ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale }).catch(() => {
-          // Best-effort only; start() will still fall back to the network recognizer.
+      const NEEDED_LOCALES = ['en-US', 'vi-VN'];
+      ExpoSpeechRecognitionModule.getSupportedLocales({})
+        .then(({ installedLocales }) => {
+          for (const locale of NEEDED_LOCALES) {
+            if (installedLocales.includes(locale)) continue;
+            ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale }).catch(() => {
+              // Best-effort only; start() will still fall back to the network recognizer.
+            });
+          }
+        })
+        .catch(() => {
+          // getSupportedLocales isn't available (Android < 13) - fall back to the old
+          // unconditional trigger; the native side no-ops if the model's already installed.
+          for (const locale of NEEDED_LOCALES) {
+            ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale }).catch(() => {});
+          }
         });
-      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -259,6 +274,11 @@ export default function HomeScreen() {
     sessionStartedAtRef.current = Date.now();
   };
 
+  const buildTranscript = (entries: LogEntry[]) =>
+    entries
+      .map((e) => `${e.speaker} (${e.sourceLang}): ${e.source}\n-> (${e.targetLang}): ${e.translated}`)
+      .join('\n\n');
+
   // Fire-and-forget: summarize the just-finished session via Gemini and mark it ended in
   // storage. Runs after the UI has already moved on, so a slow/failed API call never blocks
   // leaving the session.
@@ -267,18 +287,13 @@ export default function HomeScreen() {
     currentSessionIdRef.current = null;
     if (!sessionId || log.length === 0) return;
     if (!geminiReady || !geminiConfig) {
-      console.log('[LiveTranslate] Gemini not configured/consented, skipping summary');
       await endSession(sessionId);
       return;
     }
-    const transcript = log
-      .map((e) => `${e.speaker} (${e.sourceLang}): ${e.source}\n-> (${e.targetLang}): ${e.translated}`)
-      .join('\n\n');
     try {
-      const summary = await summarizeSession(geminiConfig, transcript);
+      const summary = await summarizeSession(geminiConfig, buildTranscript(log));
       await endSession(sessionId, summary);
-    } catch (err: any) {
-      console.log(`[LiveTranslate] summarizeSession failed: ${err?.message ?? err}`);
+    } catch {
       await endSession(sessionId);
     }
   };
@@ -322,12 +337,12 @@ export default function HomeScreen() {
 
   const handleIncomingMessage = (msg: NetMessage) => {
     if (msg.kind === 'caption') {
-      console.log(`[LiveTranslate] handleIncomingMessage(caption): ${msg.speaker} - ${msg.source}`);
       setLog((prev) => [
         ...prev,
         {
           id: msg.id,
           speaker: msg.speaker,
+          isHost: msg.isHost,
           sourceLang: msg.sourceLang,
           targetLang: msg.targetLang,
           source: msg.source,
@@ -337,7 +352,6 @@ export default function HomeScreen() {
       return;
     }
     if (msg.kind === 'request-speak') {
-      console.log(`[LiveTranslate] handleIncomingMessage(request-speak): ${msg.name}`);
       setPendingRequests((prev) =>
         prev.some((r) => r.deviceId === msg.deviceId)
           ? prev
@@ -347,9 +361,13 @@ export default function HomeScreen() {
     }
     if (msg.kind === 'speak-decision') {
       if (msg.deviceId === deviceIdRef.current) {
-        console.log(`[LiveTranslate] handleIncomingMessage(speak-decision): approved=${msg.approved}`);
         setMicApproved(msg.approved);
       }
+      return;
+    }
+    if (msg.kind === 'end-meeting') {
+      setSaveAsSummaryChecked(false);
+      setEndMeetingPromptVisible(true);
       return;
     }
     // 'hello' - only the host's network layer needs this (to map deviceId -> socket).
@@ -424,8 +442,7 @@ export default function HomeScreen() {
     setRole('host');
   };
 
-  const leaveSession = () => {
-    void endPersistedSession();
+  const resetSessionState = () => {
     sessionRef.current?.close();
     sessionRef.current = null;
     setRole(null);
@@ -437,6 +454,52 @@ export default function HomeScreen() {
     setPendingRequests([]);
     setMicApproved(true);
     setSessionTab('chat');
+  };
+
+  const leaveSession = () => {
+    void endPersistedSession();
+    resetSessionState();
+  };
+
+  // Host-only: broadcasts 'end-meeting' to every peer, then shows the same save/discard
+  // prompt locally that peers get from handleIncomingMessage above.
+  const hostEndMeeting = () => {
+    if (role === 'host' && sessionRef.current) {
+      (sessionRef.current as HostSession).broadcast({ kind: 'end-meeting' });
+    }
+    setSaveAsSummaryChecked(false);
+    setEndMeetingPromptVisible(true);
+  };
+
+  // Runs on every device (host and peers alike) once they've decided, via the
+  // end-meeting prompt, whether to keep the transcript and whether to summarize it first.
+  const finishEndedMeeting = async (save: boolean) => {
+    setEndMeetingPromptVisible(false);
+    const sessionId = currentSessionIdRef.current;
+    currentSessionIdRef.current = null;
+    if (sessionId) {
+      if (!save) {
+        await deleteSession(sessionId);
+      } else if (saveAsSummaryChecked && log.length > 0) {
+        if (geminiReady && geminiConfig) {
+          try {
+            const summary = await summarizeSession(geminiConfig, buildTranscript(log));
+            await endSession(sessionId, summary);
+          } catch {
+            await endSession(sessionId);
+          }
+        } else {
+          Alert.alert(
+            t('endMeetingPromptTitle'),
+            geminiConsent === false ? t('consentDeclinedMessage') : t('notConfiguredMessage')
+          );
+          await endSession(sessionId);
+        }
+      } else {
+        await endSession(sessionId);
+      }
+    }
+    resetSessionState();
   };
 
   const requestToSpeak = () => {
@@ -460,14 +523,12 @@ export default function HomeScreen() {
   };
 
   const broadcastCaption = (entry: LogEntry) => {
-    console.log(
-      `[LiveTranslate] broadcastCaption called: role=${role} hasSession=${!!sessionRef.current} text="${entry.source}"`
-    );
     if (!sessionRef.current || !role) return;
     const msg: CaptionMessage = {
       kind: 'caption',
       id: entry.id,
       speaker: entry.speaker,
+      isHost: entry.isHost,
       sourceLang: entry.sourceLang,
       targetLang: entry.targetLang,
       source: entry.source,
@@ -491,7 +552,6 @@ export default function HomeScreen() {
 
   const forceCheckpoint = () => {
     if (!isRunningRef.current || cutRequestedRef.current) return;
-    console.log('[LiveTranslate] forceCheckpoint -> stop()');
     cutRequestedRef.current = true;
     ExpoSpeechRecognitionModule.stop();
   };
@@ -584,9 +644,9 @@ export default function HomeScreen() {
     text: string,
     sourceLang: Lang,
     targetLang: Lang,
-    speaker: string
+    speaker: string,
+    isHost: boolean
   ) => {
-    console.log(`[LiveTranslate] queueTranslate: enqueue id=${entryId} ${sourceLang}->${targetLang}`);
     translateChainRef.current = translateChainRef.current
       .then(() =>
         onTranslateTask({
@@ -602,17 +662,15 @@ export default function HomeScreen() {
         const translated = Array.isArray(result.translatedTexts)
           ? result.translatedTexts.join(' ')
           : String(result.translatedTexts);
-        console.log(`[LiveTranslate] translate OK id=${entryId} -> "${translated}"`);
         setLog((prev) =>
           prev.map((e) => (e.id === entryId ? { ...e, translated } : e))
         );
         // Built directly from values already in scope here, rather than pulled out of the
         // setLog updater as a side effect - React doesn't guarantee that updater runs
         // synchronously, so relying on it left broadcastCaption silently never firing.
-        broadcastCaption({ id: entryId, speaker, sourceLang, targetLang, source: text, translated });
+        broadcastCaption({ id: entryId, speaker, isHost, sourceLang, targetLang, source: text, translated });
       })
       .catch((error: any) => {
-        console.log(`[LiveTranslate] translate FAILED id=${entryId}: ${error?.code ?? ''} ${error?.message ?? error}`);
         setLog((prev) =>
           prev.map((e) =>
             e.id === entryId
@@ -629,42 +687,37 @@ export default function HomeScreen() {
     const peakVolume = segmentPeakVolumeRef.current;
     segmentPeakVolumeRef.current = 0;
     if (!text.trim()) {
-      console.log('[LiveTranslate] finalizeSegment: blank text, skipping');
       return;
     }
     const noiseGateThreshold = 1 - micSensitivityRef.current;
     if (peakVolume < noiseGateThreshold) {
-      console.log(
-        `[LiveTranslate] finalizeSegment: discarded as noise (peak=${peakVolume.toFixed(2)} < gate=${noiseGateThreshold.toFixed(2)}): "${text}"`
-      );
       return;
     }
     const id = `me-${Date.now()}-${++logIdRef.current}`;
-    console.log(`[LiveTranslate] finalizeSegment: id=${id} text="${text}"`);
     const sourceLang = currentSourceLangRef.current;
     const targetLang: Lang = sourceLang === 'vi' ? 'en' : 'vi';
     // 'Host' is a stable cross-device identifier (broadcast as the `speaker` field), not
     // user-facing chrome - it must not be swapped per the local device's UI language, or
     // the isPresenter check below would break for peers running a different UI language.
     const speaker = nameInput.trim() || (role === 'host' ? 'Host' : t('you'));
+    // Solo counts as "hosting" your own session too - only an actual join participant
+    // gets the participant color.
+    const isHost = role !== 'join';
     setLog((prev) => [
       ...prev,
-      { id, speaker, sourceLang, targetLang, source: text, translated: '...' },
+      { id, speaker, isHost, sourceLang, targetLang, source: text, translated: '...' },
     ]);
-    queueTranslate(id, text, sourceLang, targetLang, speaker);
+    queueTranslate(id, text, sourceLang, targetLang, speaker, isHost);
   };
 
   useSpeechRecognitionEvent('start', () => {
-    console.log('[LiveTranslate] event: start');
     setStatus(t('statusListening'));
   });
 
   useSpeechRecognitionEvent('end', () => {
-    console.log('[LiveTranslate] event: end');
     clearSilenceTimer();
     volumeLevel.value = withTiming(0, { duration: 300 });
     if (lastPartialRef.current.trim()) {
-      console.log(`[LiveTranslate] end: promoting last partial to final: "${lastPartialRef.current}"`);
       finalizeSegment(lastPartialRef.current);
       lastPartialRef.current = '';
     }
@@ -688,7 +741,6 @@ export default function HomeScreen() {
     if (normalized < PAUSE_VOLUME_THRESHOLD) {
       if (!silenceTimerRef.current) {
         silenceTimerRef.current = setTimeout(() => {
-          console.log('[LiveTranslate] silence detected, forcing checkpoint');
           forceCheckpoint();
         }, SILENCE_CUT_DURATION_MS);
       }
@@ -699,9 +751,6 @@ export default function HomeScreen() {
 
   useSpeechRecognitionEvent('result', (event) => {
     const text = event.results[0]?.transcript ?? '';
-    console.log(
-      `[LiveTranslate] result isFinal=${event.isFinal} len=${text.length} text="${text}"`
-    );
     if (event.isFinal) {
       lastPartialRef.current = '';
       finalizeSegment(text);
@@ -741,9 +790,6 @@ export default function HomeScreen() {
   });
 
   useSpeechRecognitionEvent('languagedetection', (event) => {
-    console.log(
-      `[LiveTranslate] event: languagedetection detected=${event.detectedLanguage} confidence=${event.confidence}`
-    );
     const lang: Lang = event.detectedLanguage.toLowerCase().startsWith('vi') ? 'vi' : 'en';
     currentSourceLangRef.current = lang;
     setStatus(
@@ -756,7 +802,6 @@ export default function HomeScreen() {
   });
 
   useSpeechRecognitionEvent('error', (event) => {
-    console.log(`[LiveTranslate] event: error code=${event.error} message=${event.message}`);
     // On-device pack missing -> fall back to the network recognizer so the demo still works.
     if (
       useOnDeviceRef.current &&
@@ -804,14 +849,7 @@ export default function HomeScreen() {
             onScanned={onQrScanned}
             statusMessage={joinStatus || undefined}
           />
-        </SafeAreaView>
-      );
-    }
-
-    if (setupStep === 'join-code') {
-      return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-          <JoinCodeScreen onBack={() => setSetupStep('select')} onScanQrInstead={startJoinScan} />
+          <VersionBadge />
         </SafeAreaView>
       );
     }
@@ -826,6 +864,7 @@ export default function HomeScreen() {
             onStart={enterHostSession}
             onCancel={leaveSession}
           />
+          <VersionBadge />
         </SafeAreaView>
       );
     }
@@ -837,12 +876,11 @@ export default function HomeScreen() {
             nameInput={nameInput}
             onNameChange={setNameInput}
             onJoinQr={startJoinScan}
-            onJoinCode={() => setSetupStep('join-code')}
             onPresenter={startHostMode}
             onSolo={enterSolo}
-            onOpenHistory={openHistory}
             statusMessage={joinStatus || undefined}
           />
+          <VersionBadge />
         </SafeAreaView>
         <HistoryDrawer
           visible={historyVisible}
@@ -858,14 +896,17 @@ export default function HomeScreen() {
 
   const selfName = nameInput.trim() || (role === 'host' ? 'Host' : t('you'));
   const speakerLangByName = new Map<string, string>();
+  const speakerIsHostByName = new Map<string, boolean>();
   for (const entry of log) {
     speakerLangByName.set(entry.speaker, entry.sourceLang.toUpperCase());
+    speakerIsHostByName.set(entry.speaker, entry.isHost);
   }
   if (!speakerLangByName.has(selfName)) speakerLangByName.set(selfName, 'EN');
+  if (!speakerIsHostByName.has(selfName)) speakerIsHostByName.set(selfName, role !== 'join');
   const participants = Array.from(speakerLangByName.entries()).map(([name, lang]) => ({
     name,
     isYou: name === selfName,
-    isPresenter: name === 'Host',
+    isPresenter: speakerIsHostByName.get(name) ?? false,
     lang,
   }));
 
@@ -876,6 +917,7 @@ export default function HomeScreen() {
     source: entry.source,
     translated: entry.translated,
     speaker: entry.speaker,
+    isHost: entry.isHost,
   }));
 
   const canControlSession = role !== 'join' || micApproved;
@@ -886,23 +928,16 @@ export default function HomeScreen() {
         style={{
           flex: 1,
           padding: 16,
-          // The web-only floating pill tab bar (app-tabs.web.tsx) is absolutely positioned
-          // over the page content, so screens with no top bar of their own (e.g. the
-          // Participants tab in solo mode) need extra clearance on web or it overlaps
-          // and intercepts taps - same pattern src/app/explore.tsx used to use.
-          paddingTop: Platform.select({ web: 64, default: 16 }),
           gap: 12,
         }}
       >
-        {role !== 'solo' && (
-          <SessionTopBar
-            sessionId={hostAddress ? String(hostAddress.port) : 'LAN'}
-            peopleCount={peerCount}
-            leaveLabel={t('leave')}
-            onLeave={leaveSession}
-            onOpenHistory={openHistory}
-          />
-        )}
+        <SessionTopBar
+          sessionId={role !== 'solo' ? (hostAddress ? String(hostAddress.port) : 'LAN') : undefined}
+          peopleCount={peerCount}
+          leaveLabel={role === 'host' ? t('endMeeting') : t('leave')}
+          onLeave={role === 'host' ? hostEndMeeting : leaveSession}
+          onOpenHistory={openHistory}
+        />
 
         {sessionTab === 'chat' ? (
           <SessionChatScreen
@@ -912,6 +947,7 @@ export default function HomeScreen() {
             partialText={partialText}
             draftTranslated={draftTranslated}
             status={status}
+            isRunning={isRunning}
             volumeLevel={volumeLevel}
             micSensitivity={micSensitivity}
             onMicSensitivityChange={setMicSensitivity}
@@ -932,16 +968,8 @@ export default function HomeScreen() {
         {canControlSession ? (
           <ControlBar
             isRunning={isRunning}
-            isMuted={isMuted}
-            onToggleMute={() => setIsMuted((v) => !v)}
             onToggleRunning={onToggle}
-            onToggleSpeaker={() => setSpeakerOn((v) => !v)}
-            speakerOn={speakerOn}
-            onTextSize={() => {}}
             onMore={() => setApiKeySettingsVisible(true)}
-            muteLabel={isMuted ? t('unmute') : t('mute')}
-            speakerLabel={t('speaker')}
-            textSizeLabel={t('textSize')}
             moreLabel={t('more')}
           />
         ) : (
@@ -1046,6 +1074,46 @@ export default function HomeScreen() {
         onClose={() => setHistoryVisible(false)}
         onDelete={handleDeleteSession}
       />
+
+      <Modal
+        visible={endMeetingPromptVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => void finishEndedMeeting(true)}
+      >
+        <View
+          style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 }}
+        >
+          <View style={{ backgroundColor: theme.background, borderRadius: 16, padding: 20, gap: 14 }}>
+            <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }}>
+              {t('endMeetingPromptTitle')}
+            </Text>
+            <Text style={{ fontSize: 13.5, lineHeight: 19, color: theme.textSecondary }}>
+              {t('endMeetingPromptBody')}
+            </Text>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Switch value={saveAsSummaryChecked} onValueChange={setSaveAsSummaryChecked} />
+              <Text style={{ flex: 1, fontSize: 13.5, color: theme.text }}>{t('saveAsSummaryLabel')}</Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <PrimaryButton
+                label={t('save')}
+                onPress={() => void finishEndedMeeting(true)}
+                style={{ flex: 1 }}
+              />
+              <SecondaryButton
+                label={t('dontSave')}
+                onPress={() => void finishEndedMeeting(false)}
+                style={{ flex: 1 }}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <VersionBadge />
     </SafeAreaView>
   );
 }
