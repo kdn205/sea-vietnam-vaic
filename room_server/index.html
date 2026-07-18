@@ -85,12 +85,6 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && joined) keepAwake();
 });
 
-async function newSession() {
-  if (!confirm('Bắt đầu cuộc họp mới?\nBiên bản hiện tại sẽ được lưu file và màn hình mọi người xóa trắng.')) return;
-  try { await fetch('/new-session', {method: 'POST'}); }
-  catch (e) { setStatus('Lỗi: ' + e.message); }
-}
-
 async function reqSummary() {
   const btn = el('sumbtn');
   btn.disabled = true;
@@ -104,6 +98,12 @@ async function reqSummary() {
   } finally {
     btn.disabled = false;
   }
+}
+
+async function newSession() {
+  if (!confirm('Bắt đầu cuộc họp mới?\nBiên bản hiện tại sẽ được lưu file và màn hình mọi người xóa trắng.')) return;
+  try { await fetch('/new-session', {method: 'POST'}); }
+  catch (e) { setStatus('Lỗi: ' + e.message); }
 }
 
 async function fillMics() {

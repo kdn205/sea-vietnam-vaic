@@ -72,11 +72,27 @@ async def main():
         phone("Sarah", "en", ["en3", "en4"], results),
         phone("Nam", "vi", ["vi5", "vi6"], results),
     )
-    uniq = {m["id"] for m in results}
-    print(f"\nNhan duoc {len(uniq)} cau final tu 3 nguoi noi dong thoi "
-          f"(tong {time.perf_counter()-t0:.0f}s).")
-    ok = len(uniq) >= 6
-    print("SELFTEST " + ("PASS" if ok else "FAIL (mong doi >= 6 cau)"))
+    # moi nguoi noi 2 cau lien tiep -> server GOP thanh 1 bubble co du noi dung
+    latest = {}
+    for m in results:
+        latest[m["id"]] = m
+    by_name = {}
+    for m in latest.values():
+        by_name.setdefault(m["name"], []).append(m["text"])
+    expects = {
+        "Giap": ["Xin chào", "biên bản ghi nhớ"],
+        "Sarah": ["schedule", "contract terms"],
+        "Nam": ["báo cáo tài chính", "thị trường"],
+    }
+    ok = True
+    for name, needles in expects.items():
+        joined = " ".join(by_name.get(name, []))
+        got = all(n.lower() in joined.lower() for n in needles)
+        merged = len(by_name.get(name, [])) == 1
+        print(f"  {name}: du noi dung={got} | gop thanh 1 bubble={merged}")
+        ok = ok and got
+    print(f"\n(tong {time.perf_counter()-t0:.0f}s)")
+    print("SELFTEST " + ("PASS" if ok else "FAIL (thieu noi dung cau)"))
 
 
 if __name__ == "__main__":

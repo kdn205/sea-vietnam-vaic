@@ -29,7 +29,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.join(HERE, "..", "models")
 
 SAMPLE_RATE = 16000
-SILENCE_END_S = 0.45      # im lang -> ket thuc cau
+SILENCE_END_S = 0.55      # im lang -> ket thuc cau
+MERGE_WINDOW_S = 4.0      # cung nguoi noi tiep trong N giay -> noi vao cau truoc
+MERGE_MAX_WORDS = 60      # tran do dai cau da gop
 PREROLL_S = 0.3
 PARTIAL_EVERY_S = 0.3     # nhip cap nhat ban nhap (zipformer du nhanh)
 MIN_SPEECH_S = 0.35
@@ -197,6 +199,14 @@ class Room:
         """Xoa cau bi dedup (ban nghe ke) khoi bien ban."""
         self.history[:] = [h for h in self.history if h["id"] != uid]
 
+    def update_final(self, uid, **fields):
+        """Cap nhat cau da gop them doan noi tiep."""
+        for h in self.history:
+            if h["id"] == uid:
+                h.update(fields)
+                return True
+        return False
+
     async def broadcast(self, msg: dict):
         dead = []
         for ws in list(self.clients):
@@ -276,6 +286,7 @@ def feed_audio(c: Client, chunk: np.ndarray):
                 ROOM.partials[c.name] = (np.concatenate(c.buf), c, c.utt)
 
         if c.silence_s >= SILENCE_END_S or c.speech_s >= MAX_SPEECH_S:
+            forced = c.speech_s >= MAX_SPEECH_S  # bi cat cuong buc giua chung
             audio = np.concatenate(c.buf)
             # cat duoi im lang (giu 0.15s): decode nhanh hon va tranh ASR
             # ao giac them tu vao khoang lang cuoi cau
@@ -285,7 +296,7 @@ def feed_audio(c: Client, chunk: np.ndarray):
             with ROOM.lock:
                 ROOM.partials.pop(c.name, None)
             if c.speech_s - c.silence_s >= MIN_SPEECH_S:
-                ROOM.final_q.put((audio, c, c.utt))
+                ROOM.final_q.put((audio, c, c.utt, forced))
             c.speaking = False
             c.buf, c.preroll, c.preroll_s = [], [], 0.0
 
@@ -310,24 +321,25 @@ def worker():
     """Gom TAT CA nguoi dang cho vao mot batch: nhieu nguoi noi cung luc
     thi chi phi ~1.4x mot nguoi thay vi Nx (ASR decode_streams + MT batch)."""
     last_partial = {}   # client name -> text nhap gan nhat (bo dich lai nhap trung)
-    recent_finals = []  # (timestamp, name, text) de loc cau "nghe ke" tu mic hang xom
+    recent_finals = []  # (timestamp, name, text, rms, id) de loc cau "nghe ke"
+    last_final = {}     # client name -> cau chot gan nhat (de gop cau noi tiep)
     while True:
-        jobs = []  # (kind, audio, client, utt)
+        jobs = []  # (kind, audio, client, utt, forced)
         try:
-            audio, c, utt = ROOM.final_q.get(timeout=0.05)
-            jobs.append(["final", audio, c, utt])
+            audio, c, utt, forced = ROOM.final_q.get(timeout=0.05)
+            jobs.append(["final", audio, c, utt, forced])
         except queue.Empty:
             pass
         while True:  # vet not cac final dang doi
             try:
-                audio, c, utt = ROOM.final_q.get_nowait()
-                jobs.append(["final", audio, c, utt])
+                audio, c, utt, forced = ROOM.final_q.get_nowait()
+                jobs.append(["final", audio, c, utt, forced])
             except queue.Empty:
                 break
         with ROOM.lock:  # lay ban nhap moi nhat cua moi nguoi
             for name in list(ROOM.partials):
                 audio, c, utt = ROOM.partials.pop(name)
-                jobs.append(["partial", audio, c, utt])
+                jobs.append(["partial", audio, c, utt, False])
         if not jobs:
             continue
         try:
@@ -342,35 +354,50 @@ def worker():
                         texts[i] = t
             t_asr = round((time.perf_counter() - t0) / len(jobs), 2)
 
-            # --- loc rac + nhap trung + cau "nghe ke" tu mic nguoi ngoi canh ---
+            # --- loc rac + nhap trung + "nghe ke" + GOP cau noi tiep ---
             now = time.time()
             recent_finals[:] = [r for r in recent_finals if now - r[0] < 5.0]
-            keep = []
-            for i, (kind, audio, c, utt) in enumerate(jobs):
+            keep = []  # (kind, client, utt, out_text, out_id, drop_id, out_dur, forced)
+            for i, (kind, audio, c, utt, forced) in enumerate(jobs):
                 text = texts[i]
+                dur = round(len(audio) / SAMPLE_RATE, 1)
                 if not text or len(re.sub(r"[^\w]", "", text)) <= 1:
                     if kind == "final":
                         ROOM.broadcast_threadsafe({"type": "drop", "id": f"{c.name}#{utt}"})
                     continue
-                if kind == "partial" and last_partial.get(c.name) == text:
+                if kind == "partial":
+                    if last_partial.get(c.name) == text:
+                        continue
+                    keep.append((kind, c, utt, text, f"{c.name}#{utt}", None, dur, False))
                     continue
-                if kind == "final":
-                    # 2 mic ra cau gan giong nhau = 1 nguoi noi lot vao mic
-                    # hang xom -> GIU BAN TIN HIEU MANH HON (bat ke den truoc sau)
-                    rms = float(np.sqrt(np.mean(audio ** 2)))
-                    dup = next((r for r in recent_finals
-                                if r[1] != c.name and _too_similar(r[2], text)), None)
-                    if dup is not None:
-                        if rms <= dup[3]:
-                            ROOM.broadcast_threadsafe(
-                                {"type": "drop", "id": f"{c.name}#{utt}"})
-                            continue
-                        # ban moi manh hon -> xoa bubble cua ban yeu da hien
-                        ROOM.broadcast_threadsafe({"type": "drop", "id": dup[4]})
-                        ROOM.remove_final(dup[4])
-                        recent_finals.remove(dup)
-                    recent_finals.append((now, c.name, text, rms, f"{c.name}#{utt}"))
-                keep.append((kind, audio, c, utt, text))
+
+                # 2 mic ra cau gan giong nhau = 1 nguoi noi lot vao mic hang xom
+                # -> GIU BAN TIN HIEU MANH HON (bat ke den truoc hay sau)
+                rms = float(np.sqrt(np.mean(audio ** 2)))
+                dup = next((r for r in recent_finals
+                            if r[1] != c.name and _too_similar(r[2], text)), None)
+                if dup is not None:
+                    if rms <= dup[3]:
+                        ROOM.broadcast_threadsafe(
+                            {"type": "drop", "id": f"{c.name}#{utt}"})
+                        continue
+                    ROOM.broadcast_threadsafe({"type": "drop", "id": dup[4]})
+                    ROOM.remove_final(dup[4])
+                    recent_finals.remove(dup)
+
+                # GOP: cung nguoi noi tiep ngay (hoac cau truoc bi cat cuong buc)
+                # -> noi vao cau truoc va DICH LAI toan bo de giu ngu canh
+                lf = last_final.get(c.name)
+                merged = (lf is not None
+                          and (now - lf["t"] <= MERGE_WINDOW_S or lf["forced"])
+                          and len((lf["text"] + " " + text).split()) <= MERGE_MAX_WORDS)
+                if merged:
+                    out_id, out_text = lf["id"], lf["text"] + " " + text
+                    drop_id, out_dur = f"{c.name}#{utt}", round(lf["dur"] + dur, 1)
+                else:
+                    out_id, out_text, drop_id, out_dur = f"{c.name}#{utt}", text, None, dur
+                recent_finals.append((now, c.name, out_text, rms, out_id))
+                keep.append((kind, c, utt, out_text, out_id, drop_id, out_dur, forced))
             if not keep:
                 continue
 
@@ -381,28 +408,34 @@ def worker():
                 idxs = [i for i, k in enumerate(keep) if k[0] in kinds]
                 if idxs:
                     outs = ENGINES.translate_pairs(
-                        [(keep[i][2].lang, keep[i][4]) for i in idxs], beam_size=beam)
+                        [(keep[i][1].lang, keep[i][3]) for i in idxs], beam_size=beam)
                     for i, o in zip(idxs, outs):
                         translations[i] = o
             t_mt = round((time.perf_counter() - t0) / len(keep), 2)
 
-            for (kind, audio, c, utt, text), translation in zip(keep, translations):
+            for (kind, c, utt, text, out_id, drop_id, dur, forced), translation \
+                    in zip(keep, translations):
                 if kind == "partial":
                     last_partial[c.name] = text
                 else:
                     last_partial.pop(c.name, None)
-                    ROOM.log_final({
-                        "id": f"{c.name}#{utt}", "time": time.strftime("%H:%M:%S"),
+                    entry = {
+                        "id": out_id, "time": time.strftime("%H:%M:%S"),
                         "name": c.name, "lang": c.lang,
                         "text": text, "translation": translation,
-                        "t_asr": t_asr, "t_mt": t_mt,
-                        "dur": round(len(audio) / SAMPLE_RATE, 1),
-                    })
+                        "t_asr": t_asr, "t_mt": t_mt, "dur": dur,
+                    }
+                    # cau gop: cap nhat entry cu trong bien ban thay vi them moi
+                    if drop_id is None or not ROOM.update_final(out_id, **entry):
+                        ROOM.log_final(entry)
+                    if drop_id:
+                        ROOM.broadcast_threadsafe({"type": "drop", "id": drop_id})
+                    last_final[c.name] = {"id": out_id, "text": text, "t": time.time(),
+                                          "dur": dur, "forced": forced}
                 ROOM.broadcast_threadsafe({
-                    "type": kind, "id": f"{c.name}#{utt}", "name": c.name,
+                    "type": kind, "id": out_id, "name": c.name,
                     "lang": c.lang, "text": text, "translation": translation,
-                    "t_asr": t_asr, "t_mt": t_mt,
-                    "dur": round(len(audio) / SAMPLE_RATE, 1),
+                    "t_asr": t_asr, "t_mt": t_mt, "dur": dur,
                 })
         except Exception as e:
             print(f"Loi worker: {type(e).__name__}: {e}")
