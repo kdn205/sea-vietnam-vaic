@@ -517,6 +517,33 @@ def summarize_history(room):
         return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True).strip()
 
 
+def answer_question(room, question):
+    """Hoi-dap voi bien ban: Qwen local tra loi dua tren transcript."""
+    import torch
+
+    with _sum_lock:
+        _load_summarizer(room)
+        lines = "\n".join(
+            f"[{h['time']}] {h['name']} ({h['lang'].upper()}): {h['text']}"
+            for h in room.history)
+        messages = [
+            {"role": "system", "content":
+             "Bạn là trợ lý cuộc họp song ngữ Việt-Anh. CHỈ trả lời dựa trên "
+             "transcript được cung cấp. Nếu transcript không có thông tin, nói "
+             "rõ 'Không tìm thấy trong cuộc họp'. Trả lời NGẮN GỌN, cùng ngôn "
+             "ngữ với câu hỏi."},
+            {"role": "user", "content":
+             f"Transcript cuộc họp:\n{lines}\n\nCâu hỏi: {question}"},
+        ]
+        tok, model = _sum["tok"], _sum["model"]
+        ids = tok.apply_chat_template(messages, add_generation_prompt=True,
+                                      return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(ids, max_new_tokens=250, do_sample=False,
+                                 temperature=None, top_p=None, top_k=None)
+        return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True).strip()
+
+
 def build_transcript_md(room):
     lines = [f"# Biên bản họp — phòng {room.id} — {room.started}",
              f"Thành viên: {', '.join(sorted({h['name'] for h in room.history}))}", ""]
@@ -632,6 +659,26 @@ async def summary_endpoint(room: str = ""):
     await r.broadcast({"type": "summary", "text": text,
                        "time": time.strftime("%H:%M:%S")})
     return {"ok": True, "text": text}
+
+
+@app.post("/ask")
+async def ask_endpoint(request: Request, room: str = ""):
+    """Hoi-dap voi noi dung cuoc hop (AI local, chi nguoi hoi thay cau tra loi)."""
+    r = ROOMS.get(room.strip().upper())
+    if r is None or not r.history:
+        return {"error": "Chưa có nội dung cuộc họp để hỏi."}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    q = (body.get("q") or "").strip()
+    if not q:
+        return {"error": "Câu hỏi trống."}
+    try:
+        answer = await asyncio.to_thread(answer_question, r, q)
+    except Exception as e:
+        return {"error": f"Lỗi: {type(e).__name__}: {e}"}
+    return {"ok": True, "answer": answer}
 
 
 @app.websocket("/ws")

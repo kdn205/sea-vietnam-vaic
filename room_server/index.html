@@ -228,6 +228,29 @@
 <div id="toast"></div>
 <div id="micwrap"><button id="micbtn" onclick="toggleMic()">🎙</button></div>
 
+<!-- modal hoi dap voi bien ban -->
+<div id="askmodal" style="display:none; position:fixed; inset:0; z-index:28;
+     background:rgba(10,12,20,.55); backdrop-filter:blur(4px);"
+     onclick="this.style.display='none'">
+  <div style="max-width:420px; height:70vh; margin:8vh auto 0; background:#fff;
+       border-radius:24px; display:flex; flex-direction:column; overflow:hidden"
+       onclick="event.stopPropagation()">
+    <div style="padding:16px 18px 12px; border-bottom:1px solid var(--line)">
+      <b style="color:var(--acc)">💬 Hỏi đáp với biên bản</b>
+      <div style="font-size:12px; color:var(--mut); margin-top:2px">
+        AI local trả lời dựa trên nội dung cuộc họp — ví dụ: "Deadline chốt là khi nào?"</div>
+    </div>
+    <div id="askfeed" style="flex:1; overflow-y:auto; padding:14px 16px"></div>
+    <div style="display:flex; gap:8px; padding:12px 14px max(14px, env(safe-area-inset-bottom));
+         border-top:1px solid var(--line)">
+      <input id="askinput" class="tf" style="border-color:var(--line)"
+             placeholder="Nhập câu hỏi... / Ask anything..."
+             onkeydown="if(event.key==='Enter')sendAsk()">
+      <button class="go" style="background:var(--grad); border:none" onclick="sendAsk()">➤</button>
+    </div>
+  </div>
+</div>
+
 <!-- modal QR moi vao phong -->
 <div id="qrmodal" style="display:none; position:fixed; inset:0; z-index:28;
      background:rgba(10,12,20,.55); backdrop-filter:blur(4px);"
@@ -261,6 +284,8 @@
     <span class="ic">📥</span> Tải biên bản song ngữ (.md)</button>
   <button class="act" id="sumbtn" onclick="closeSheet(); reqSummary()">
     <span class="ic">📝</span> Tóm tắt cuộc họp (AI local)</button>
+  <button class="act" onclick="closeSheet(); openAsk()">
+    <span class="ic">💬</span> Hỏi đáp với biên bản (AI local)</button>
   <button class="act warn" onclick="closeSheet(); newSession()">
     <span class="ic">🆕</span> Bắt đầu cuộc họp mới</button>
 </div>
@@ -375,6 +400,44 @@ function speak(text, lang) {
   // xep hang toi da 2 cau, qua thi bo cau cu de khong tut hau hoi thoai
   if (speechSynthesis.pending) speechSynthesis.cancel();
   speechSynthesis.speak(u);
+}
+
+/* ---------- Hoi dap voi bien ban ---------- */
+function openAsk() {
+  el('askmodal').style.display = 'block';
+  setTimeout(() => el('askinput').focus(), 150);
+}
+function askBubble(text, mine) {
+  const d = document.createElement('div');
+  d.style.cssText = 'margin-bottom:10px; display:flex;' +
+    (mine ? 'justify-content:flex-end' : '');
+  d.innerHTML = `<div style="max-width:85%; padding:9px 13px; border-radius:16px;
+    font-size:14.5px; line-height:1.45; white-space:pre-wrap;
+    ${mine ? 'background:var(--grad); color:#fff; border-bottom-right-radius:5px'
+           : 'background:#f1f2f8; color:var(--ink); border-bottom-left-radius:5px'}">
+    ${esc(text)}</div>`;
+  el('askfeed').appendChild(d);
+  el('askfeed').scrollTop = el('askfeed').scrollHeight;
+  return d;
+}
+async function sendAsk() {
+  const q = el('askinput').value.trim();
+  if (!q) return;
+  el('askinput').value = '';
+  askBubble(q, true);
+  const wait = askBubble('⏳ Đang đọc biên bản...', false);
+  try {
+    const r = await fetch('/ask?room=' + roomId, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({q})
+    });
+    const d = await r.json();
+    wait.remove();
+    askBubble(d.answer || d.error || 'Không có phản hồi.', false);
+  } catch (e) {
+    wait.remove();
+    askBubble('Lỗi: ' + e.message, false);
+  }
 }
 
 function showQR() {
