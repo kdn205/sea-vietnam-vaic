@@ -168,6 +168,23 @@ class Room:
         self.final_q = queue.Queue()
         self.partials = {}          # client name -> (audio, Client, utt)
         self.loop = None            # asyncio loop (gan khi server start)
+        self.history = []           # cac cau final da chot (bien ban hop)
+        self.started = time.strftime("%Y-%m-%d %H:%M")
+        self.log_path = os.path.join(
+            HERE, "logs", f"hop_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
+
+    def log_final(self, entry):
+        self.history.append(entry)
+        try:
+            os.makedirs(os.path.dirname(self.log_path), exist_ok=True)
+            with open(self.log_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except OSError:
+            pass
+
+    def remove_final(self, uid):
+        """Xoa cau bi dedup (ban nghe ke) khoi bien ban."""
+        self.history[:] = [h for h in self.history if h["id"] != uid]
 
     async def broadcast(self, msg: dict):
         dead = []
@@ -339,6 +356,7 @@ def worker():
                             continue
                         # ban moi manh hon -> xoa bubble cua ban yeu da hien
                         ROOM.broadcast_threadsafe({"type": "drop", "id": dup[4]})
+                        ROOM.remove_final(dup[4])
                         recent_finals.remove(dup)
                     recent_finals.append((now, c.name, text, rms, f"{c.name}#{utt}"))
                 keep.append((kind, audio, c, utt, text))
@@ -362,6 +380,13 @@ def worker():
                     last_partial[c.name] = text
                 else:
                     last_partial.pop(c.name, None)
+                    ROOM.log_final({
+                        "id": f"{c.name}#{utt}", "time": time.strftime("%H:%M:%S"),
+                        "name": c.name, "lang": c.lang,
+                        "text": text, "translation": translation,
+                        "t_asr": t_asr, "t_mt": t_mt,
+                        "dur": round(len(audio) / SAMPLE_RATE, 1),
+                    })
                 ROOM.broadcast_threadsafe({
                     "type": kind, "id": f"{c.name}#{utt}", "name": c.name,
                     "lang": c.lang, "text": text, "translation": translation,
@@ -372,10 +397,21 @@ def worker():
             print(f"Loi worker: {type(e).__name__}: {e}")
 
 
+def build_transcript_md():
+    lines = [f"# Biên bản họp — {ROOM.started}",
+             f"Thành viên: {', '.join(sorted({h['name'] for h in ROOM.history}))}", ""]
+    for h in ROOM.history:
+        flag = "VN" if h["lang"] == "vi" else "EN"
+        lines.append(f"**[{h['time']}] {h['name']} [{flag}]**: {h['text']}")
+        lines.append(f"> {h['translation']}")
+        lines.append("")
+    return "\n".join(lines)
+
+
 # ----------------------------- FastAPI -----------------------------
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi.responses import FileResponse, Response  # noqa: E402
 
 app = FastAPI()
 
@@ -383,6 +419,16 @@ app = FastAPI()
 @app.get("/")
 async def index():
     return FileResponse(os.path.join(HERE, "index.html"))
+
+
+@app.get("/transcript")
+async def transcript():
+    if not ROOM.history:
+        return Response("Chua co noi dung.", media_type="text/plain; charset=utf-8")
+    return Response(
+        build_transcript_md(), media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition":
+                 f'attachment; filename="bien-ban-hop-{time.strftime("%Y%m%d-%H%M")}.md"'})
 
 
 @app.websocket("/ws")

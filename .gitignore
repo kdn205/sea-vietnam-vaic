@@ -5,3 +5,4 @@ __pycache__/
 *.pyc
 room_server/cert.pem
 room_server/key.pem
+room_server/logs/
