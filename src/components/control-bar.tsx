@@ -55,7 +55,7 @@ export function ControlBar({
   const theme = useTheme();
 
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
       <ControlButton
         icon={{ ios: isMuted ? 'mic.slash.fill' : 'mic.fill', android: 'mic', web: 'mic' }}
         label={muteLabel}
@@ -98,6 +98,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 24,
+    borderWidth: 1,
   },
   smallButton: {
     alignItems: 'center',
@@ -109,9 +112,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   mainButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
   },

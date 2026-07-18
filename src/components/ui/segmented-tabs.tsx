@@ -21,12 +21,9 @@ export function SegmentedTabs<T extends string>({ options, value, onChange }: Pr
           <Pressable
             key={opt.value}
             onPress={() => onChange(opt.value)}
-            style={[
-              styles.segment,
-              selected && { backgroundColor: theme.background, shadowOpacity: 0.08 },
-            ]}
+            style={[styles.segment, selected && { backgroundColor: theme.text, shadowOpacity: 0.12 }]}
           >
-            <Text style={[styles.label, { color: selected ? theme.primary : theme.textSecondary }]}>
+            <Text style={[styles.label, { color: selected ? theme.background : theme.textSecondary }]}>
               {opt.label}
             </Text>
           </Pressable>
