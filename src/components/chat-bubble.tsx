@@ -1,5 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import { SelectableTextView } from '@rob117/react-native-selectable-text';
+import { SymbolView } from 'expo-symbols';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { Avatar } from '@/components/ui/avatar';
@@ -22,8 +23,11 @@ type Props = {
   onExplain?: (selectedText: string, contextText: string) => void;
 };
 
-/** Transcript entry styled like a meeting-notes card: avatar + speaker/time header, then the
- * original and translated lines as stacked bubbles. */
+/**
+ * ChatGPT/Gemini-style conversation turn: the spoken line renders as a right-aligned
+ * "user message" bubble; the translation renders like an AI reply underneath - no bubble,
+ * plain text with a small sparkle mark, same convention Gemini uses for its responses.
+ */
 export function ChatBubble({ entry, onExplain }: Props) {
   const theme = useTheme();
   const { t } = useI18n();
@@ -41,26 +45,34 @@ export function ChatBubble({ entry, onExplain }: Props) {
 
   return (
     <View style={styles.entry}>
-      <View style={styles.header}>
-        <Avatar name={speakerName} size={28} />
-        <Text style={[styles.speaker, { color: theme.text }]} numberOfLines={1}>
+      <View style={styles.metaRow}>
+        <Text style={[styles.speaker, { color: theme.textSecondary }]} numberOfLines={1}>
           {speakerName}
         </Text>
         {entry.time ? <Text style={[styles.time, { color: theme.textSecondary }]}>{entry.time}</Text> : null}
       </View>
-
-      <View style={[styles.card, { backgroundColor: theme.chatBubbleTheirs, borderColor: theme.border }]}>
-        <Text style={[styles.langLabel, { color: theme.textSecondary }]}>{entry.sourceLang}</Text>
-        <SelectableTextView menuOptions={menuOptions} onSelection={handleSelection(entry.source)}>
-          <Text style={[styles.text, { color: theme.text }]}>{entry.source}</Text>
-        </SelectableTextView>
+      <View style={styles.sourceRow}>
+        <View style={[styles.sourceBubble, { backgroundColor: theme.chatBubbleMine }]}>
+          <SelectableTextView menuOptions={menuOptions} onSelection={handleSelection(entry.source)}>
+            <Text style={[styles.sourceText, { color: theme.text }]}>{entry.source}</Text>
+          </SelectableTextView>
+        </View>
+        <Avatar name={speakerName} size={24} />
       </View>
 
-      <View style={[styles.card, { backgroundColor: theme.chatBubbleMine, borderColor: theme.primarySoftBorder }]}>
-        <Text style={[styles.langLabel, { color: theme.primary }]}>{entry.targetLang}</Text>
-        <SelectableTextView menuOptions={menuOptions} onSelection={handleSelection(entry.translated)}>
-          <Text style={[styles.text, { color: theme.text, fontWeight: '600' }]}>{entry.translated}</Text>
-        </SelectableTextView>
+      <View style={styles.replyRow}>
+        <SymbolView
+          name={{ ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' }}
+          tintColor={theme.primary}
+          size={16}
+          style={styles.sparkle}
+        />
+        <View style={styles.replyBody}>
+          <Text style={[styles.langLabel, { color: theme.primary }]}>{entry.targetLang}</Text>
+          <SelectableTextView menuOptions={menuOptions} onSelection={handleSelection(entry.translated)}>
+            <Text style={[styles.replyText, { color: theme.text }]}>{entry.translated}</Text>
+          </SelectableTextView>
+        </View>
       </View>
     </View>
   );
@@ -68,37 +80,58 @@ export function ChatBubble({ entry, onExplain }: Props) {
 
 const styles = StyleSheet.create({
   entry: {
-    marginBottom: 14,
-    gap: 6,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    marginBottom: 18,
     gap: 8,
   },
+  metaRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  sourceRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  sourceBubble: {
+    maxWidth: '78%',
+    borderRadius: 18,
+    borderBottomRightRadius: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
   speaker: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
-    flexShrink: 1,
   },
   time: {
-    fontSize: 11,
-    marginLeft: 'auto',
+    fontSize: 10,
   },
-  card: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 3,
-    marginLeft: 36,
+  sourceText: {
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  replyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    paddingRight: 32,
+  },
+  sparkle: {
+    marginTop: 3,
+  },
+  replyBody: {
+    flex: 1,
+    gap: 2,
   },
   langLabel: {
     fontSize: 10,
     fontWeight: '700',
   },
-  text: {
+  replyText: {
     fontSize: 15,
-    lineHeight: 20,
+    lineHeight: 21,
   },
 });
