@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
 # dependencies
@@ -42,3 +43,21 @@ example
 # generated native folders
 /ios
 /android
+=======
+# Harness durable layer — each project instance generates its own data.
+harness.db*
+
+# macOS Finder metadata.
+.DS_Store
+
+# Rust build output for harness tooling.
+target/
+dist/
+
+# Downloaded Harness CLI binary for installed project instances.
+scripts/bin/
+
+.harness/*
+!.harness/changesets/
+!.harness/changesets/*.changeset.jsonl
+>>>>>>> origin2/main

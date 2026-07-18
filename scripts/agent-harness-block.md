@@ -1,10 +1,3 @@
-<<<<<<< HEAD
-# Expo HAS CHANGED
-
-Read the exact versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing any code.
-=======
-# Agent Instructions
-
 <!-- HARNESS:BEGIN -->
 ## Harness
 
@@ -23,4 +16,3 @@ Choose the request class before any Harness operation.
   and retrieve only the lane- and task-specific context described in
   `docs/CONTEXT_RULES.md`.
 <!-- HARNESS:END -->
->>>>>>> origin2/main
