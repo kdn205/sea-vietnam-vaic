@@ -17,6 +17,8 @@
             box-shadow: 0 1px 2px rgba(0,0,0,.08); max-width: 720px; }
   .bubble.mine { border-left: 4px solid #1a73e8; }
   .bubble.partial { opacity: .55; font-style: italic; }
+  .bubble.summary { border-left: 4px solid #f9ab00; background: #fffbf0;
+                    white-space: pre-wrap; }
   .meta { font-size: 11px; color: #888; margin-bottom: 4px; }
   .main { font-size: 17px; font-weight: 600; color: #111; }
   .sub  { font-size: 13px; color: #666; margin-top: 3px; }
@@ -55,6 +57,8 @@
   </select>
   &nbsp; <button onclick="location.href='/transcript'"
     style="font-size:13px; padding:5px 8px">📥 Biên bản</button>
+  <button id="sumbtn" onclick="reqSummary()"
+    style="font-size:13px; padding:5px 8px">📝 Tóm tắt</button>
 </div>
 <header style="display:none" id="hdr">
   <div>
@@ -78,6 +82,21 @@ async function keepAwake() {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && joined) keepAwake();
 });
+
+async function reqSummary() {
+  const btn = el('sumbtn');
+  btn.disabled = true;
+  setStatus('Đang tóm tắt cuộc họp (LLM local, có thể mất 10-30s)...');
+  try {
+    const r = await fetch('/summary', {method: 'POST'});
+    const d = await r.json();
+    if (d.error) setStatus(d.error);
+  } catch (e) {
+    setStatus('Lỗi gọi tóm tắt: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 async function fillMics() {
   // xin quyen truoc de enumerateDevices tra ve ten thiet bi day du
@@ -148,6 +167,21 @@ function handle(m) {
     if (micDead) return;  // giu nguyen canh bao mic cam, khong de status de len
     if (m.speaking) setStatus('🎤 Đang thu giọng bạn — bản dịch hiện dần bên trên...');
     else if (micOn) setStatus('Đang nghe...');
+    return;
+  }
+  if (m.type === 'sum_status') { setStatus(m.text); return; }
+  if (m.type === 'summary') {
+    // render markdown toi gian: ### tieu de va **dam**
+    const html = esc(m.text)
+      .replace(/^#{2,3} (.*)$/gm, '<b style="font-size:15px">$1</b>')
+      .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+    const b = document.createElement('div');
+    b.className = 'bubble summary';
+    b.innerHTML = `<div class="meta">📝 Tóm tắt cuộc họp · ${m.time}</div>` +
+                  `<div class="main" style="font-weight:400">${html}</div>`;
+    el('feed').appendChild(b);
+    el('feed').scrollTop = el('feed').scrollHeight;
+    setStatus('Đã có tóm tắt.');
     return;
   }
   if (m.type === 'roster') {

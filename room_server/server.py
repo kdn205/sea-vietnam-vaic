@@ -39,6 +39,7 @@ ZIP_VI = os.path.join(MODELS, "sherpa-onnx-zipformer-vi-int8-2025-04-20")
 ZIP_EN = os.path.join(MODELS, "sherpa-onnx-zipformer-gigaspeech-2023-12-12")
 ENVIT5_CT2 = os.path.join(MODELS, "envit5-ct2")
 ENVIT5_CT2_F32 = os.path.join(MODELS, "envit5-ct2-f32")
+SUM_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"   # tom tat cuoi hop, chay local, khong can API
 
 
 # ----------------------------- Engines -----------------------------
@@ -397,6 +398,61 @@ def worker():
             print(f"Loi worker: {type(e).__name__}: {e}")
 
 
+# ----------------------------- Tom tat (LLM local, lazy-load) -----------------------------
+
+_sum = {"model": None, "tok": None}
+_sum_lock = threading.Lock()
+
+
+def _load_summarizer():
+    if _sum["model"] is not None:
+        return
+    import torch
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    ROOM.broadcast_threadsafe({"type": "sum_status",
+                               "text": "Đang nạp model tóm tắt (lần đầu ~20s)..."})
+    tok = AutoTokenizer.from_pretrained(SUM_MODEL)
+    try:
+        if not torch.cuda.is_available():
+            raise RuntimeError("no cuda")
+        model = AutoModelForCausalLM.from_pretrained(
+            SUM_MODEL, dtype=torch.float16).to("cuda")
+    except Exception:
+        model = AutoModelForCausalLM.from_pretrained(SUM_MODEL, dtype=torch.float32)
+    model.eval()
+    _sum.update(model=model, tok=tok)
+
+
+def summarize_history():
+    """Tom tat bien ban bang LLM local (mot lan cuoi hop, khong can realtime)."""
+    import torch
+
+    with _sum_lock:
+        _load_summarizer()
+        lines = "\n".join(
+            f"[{h['time']}] {h['name']} ({h['lang'].upper()}): {h['text']}"
+            for h in ROOM.history)
+        messages = [
+            {"role": "system", "content":
+             "Bạn là thư ký cuộc họp kinh doanh song ngữ Việt-Anh. "
+             "Chỉ dựa vào nội dung transcript, không bịa thêm."},
+            {"role": "user", "content":
+             f"Transcript cuộc họp:\n{lines}\n\n"
+             "Hãy viết biên bản tóm tắt gồm 2 phần:\n"
+             "## Tóm tắt (Tiếng Việt)\n- Chủ đề chính\n- Các quyết định\n- Việc cần làm\n"
+             "## Summary (English)\n- Main topics\n- Decisions\n- Action items\n"
+             "Ngắn gọn, gạch đầu dòng."},
+        ]
+        tok, model = _sum["tok"], _sum["model"]
+        ids = tok.apply_chat_template(messages, add_generation_prompt=True,
+                                      return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(ids, max_new_tokens=500, do_sample=False,
+                                 temperature=None, top_p=None, top_k=None)
+        return tok.decode(out[0][ids.shape[1]:], skip_special_tokens=True).strip()
+
+
 def build_transcript_md():
     lines = [f"# Biên bản họp — {ROOM.started}",
              f"Thành viên: {', '.join(sorted({h['name'] for h in ROOM.history}))}", ""]
@@ -429,6 +485,19 @@ async def transcript():
         build_transcript_md(), media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition":
                  f'attachment; filename="bien-ban-hop-{time.strftime("%Y%m%d-%H%M")}.md"'})
+
+
+@app.post("/summary")
+async def summary_endpoint():
+    if not ROOM.history:
+        return {"error": "Chưa có nội dung để tóm tắt."}
+    try:
+        text = await asyncio.to_thread(summarize_history)
+    except Exception as e:
+        return {"error": f"Lỗi tóm tắt: {type(e).__name__}: {e}"}
+    await ROOM.broadcast({"type": "summary", "text": text,
+                          "time": time.strftime("%H:%M:%S")})
+    return {"ok": True, "text": text}
 
 
 @app.websocket("/ws")
