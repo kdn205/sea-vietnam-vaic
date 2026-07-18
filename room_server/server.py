@@ -66,33 +66,66 @@ class Engines:
             num_threads=4, decoding_method="greedy_search")
         print("Nap envit5-ct2 ...")
         self.mt_tok = AutoTokenizer.from_pretrained("VietAI/envit5-translation")
-        self.mt = ctranslate2.Translator(ENVIT5_CT2, device="cpu",
-                                         compute_type="int8", intra_threads=4)
-        self.translate("vi", "khởi động")
+        # uu tien GPU cho tang dich de danh CPU cho ASR (nhieu nguoi noi cung luc)
+        self.mt = None
+        try:
+            import torch
+            lib = os.path.join(os.path.dirname(torch.__file__), "lib")
+            if os.path.isdir(lib):
+                os.add_dll_directory(lib)
+            if torch.cuda.is_available():
+                self.mt = ctranslate2.Translator(ENVIT5_CT2, device="cuda",
+                                                 compute_type="int8_float16")
+                self.translate("vi", "khởi động")
+                print("MT chay tren GPU.")
+        except Exception as e:
+            print(f"MT GPU khong dung duoc ({type(e).__name__}) -> CPU")
+            self.mt = None
+        if self.mt is None:
+            self.mt = ctranslate2.Translator(ENVIT5_CT2, device="cpu",
+                                             compute_type="int8", intra_threads=4)
+            self.translate("vi", "khởi động")
         print("Engines san sang.")
 
-    def recognize(self, lang, audio):
-        peak = float(np.abs(audio).max())
-        if 0 < peak < 0.5:
-            audio = audio * min(0.9 / peak, 60.0)
+    def recognize_batch(self, lang, audios):
+        """Nhan dang NHIEU doan audio cung ngon ngu trong 1 lan decode."""
         rec = self.asr[lang]
-        s = rec.create_stream()
-        s.accept_waveform(SAMPLE_RATE, audio)
-        rec.decode_stream(s)
-        text = s.result.text.strip()
-        # zipformer tra ve CHU HOA het -> ve dang cau thuong cho de doc
-        if lang == "vi" and text.isupper():
-            text = text.lower().capitalize()
-        elif text.isupper():
-            text = text.lower().capitalize()
-        return text
+        streams = []
+        for audio in audios:
+            peak = float(np.abs(audio).max())
+            if 0 < peak < 0.5:
+                audio = audio * min(0.9 / peak, 60.0)
+            s = rec.create_stream()
+            s.accept_waveform(SAMPLE_RATE, audio)
+            streams.append(s)
+        if len(streams) == 1 or not hasattr(rec, "decode_streams"):
+            for s in streams:
+                rec.decode_stream(s)
+        else:
+            rec.decode_streams(streams)
+        out = []
+        for s in streams:
+            text = s.result.text.strip()
+            # zipformer tra ve CHU HOA het -> ve dang cau thuong cho de doc
+            if text.isupper():
+                text = text.lower().capitalize()
+            out.append(text)
+        return out
+
+    def translate_pairs(self, pairs):
+        """Dich NHIEU cau (src_lang, text) trong 1 lan goi batch."""
+        toks = [self.mt_tok.convert_ids_to_tokens(self.mt_tok.encode(f"{s}: {t}"))
+                for s, t in pairs]
+        res = self.mt.translate_batch(toks, beam_size=1, max_decoding_length=256)
+        outs = []
+        for r in res:
+            ids = self.mt_tok.convert_tokens_to_ids(r.hypotheses[0])
+            out = self.mt_tok.decode(ids, skip_special_tokens=True)
+            outs.append(re.sub(r"^(vi|en):\s*", "", out).strip())
+        return outs
 
     def translate(self, src, text):
-        toks = self.mt_tok.convert_ids_to_tokens(self.mt_tok.encode(f"{src}: {text}"))
-        res = self.mt.translate_batch([toks], beam_size=1, max_decoding_length=256)
-        ids = self.mt_tok.convert_tokens_to_ids(res[0].hypotheses[0])
-        out = self.mt_tok.decode(ids, skip_special_tokens=True)
-        return re.sub(r"^(vi|en):\s*", "", out).strip()
+        return self.translate_pairs([(src, text)])[0]
 
 
 # ----------------------------- Room state -----------------------------
@@ -221,45 +254,70 @@ async def _send_level(c: Client, rms: float):
 # ----------------------------- Worker -----------------------------
 
 def worker():
-    last_partial = {}   # client name -> (text, translation) de khoi dich lai nhap trung
+    """Gom TAT CA nguoi dang cho vao mot batch: nhieu nguoi noi cung luc
+    thi chi phi ~1.4x mot nguoi thay vi Nx (ASR decode_streams + MT batch)."""
+    last_partial = {}   # client name -> text nhap gan nhat (bo dich lai nhap trung)
     while True:
-        kind = None
+        jobs = []  # (kind, audio, client, utt)
         try:
             audio, c, utt = ROOM.final_q.get(timeout=0.05)
-            kind = "final"
+            jobs.append(["final", audio, c, utt])
         except queue.Empty:
-            with ROOM.lock:
-                if ROOM.partials:
-                    name = next(iter(ROOM.partials))
-                    audio, c, utt = ROOM.partials.pop(name)
-                    kind = "partial"
-        if kind is None:
+            pass
+        while True:  # vet not cac final dang doi
+            try:
+                audio, c, utt = ROOM.final_q.get_nowait()
+                jobs.append(["final", audio, c, utt])
+            except queue.Empty:
+                break
+        with ROOM.lock:  # lay ban nhap moi nhat cua moi nguoi
+            for name in list(ROOM.partials):
+                audio, c, utt = ROOM.partials.pop(name)
+                jobs.append(["partial", audio, c, utt])
+        if not jobs:
             continue
         try:
+            # --- ASR theo tung nhom ngon ngu, moi nhom 1 lan decode batch ---
             t0 = time.perf_counter()
-            text = ENGINES.recognize(c.lang, audio)
-            t_asr = time.perf_counter() - t0
-            # bo ket qua rong hoac rac 1 ky tu ("A", "I" do tieng on kich hoat VAD)
-            if not text or len(re.sub(r"[^\w]", "", text)) <= 1:
-                if kind == "final":
-                    ROOM.broadcast_threadsafe({"type": "drop", "id": f"{c.name}#{utt}"})
+            texts = [None] * len(jobs)
+            for lang in ("vi", "en"):
+                idxs = [i for i, j in enumerate(jobs) if j[2].lang == lang]
+                if idxs:
+                    results = ENGINES.recognize_batch(lang, [jobs[i][1] for i in idxs])
+                    for i, t in zip(idxs, results):
+                        texts[i] = t
+            t_asr = round((time.perf_counter() - t0) / len(jobs), 2)
+
+            # --- loc rac + nhap trung ---
+            keep = []
+            for i, (kind, audio, c, utt) in enumerate(jobs):
+                text = texts[i]
+                if not text or len(re.sub(r"[^\w]", "", text)) <= 1:
+                    if kind == "final":
+                        ROOM.broadcast_threadsafe({"type": "drop", "id": f"{c.name}#{utt}"})
+                    continue
+                if kind == "partial" and last_partial.get(c.name) == text:
+                    continue
+                keep.append((kind, audio, c, utt, text))
+            if not keep:
                 continue
-            prev = last_partial.get(c.name)
-            if kind == "partial" and prev and prev[0] == text:
-                continue  # nhap khong doi -> khoi broadcast lai
+
+            # --- MT ca loat trong 1 lan goi ---
             t0 = time.perf_counter()
-            translation = ENGINES.translate(c.lang, text)
-            t_mt = time.perf_counter() - t0
-            if kind == "partial":
-                last_partial[c.name] = (text, translation)
-            else:
-                last_partial.pop(c.name, None)
-            ROOM.broadcast_threadsafe({
-                "type": kind, "id": f"{c.name}#{utt}", "name": c.name,
-                "lang": c.lang, "text": text, "translation": translation,
-                "t_asr": round(t_asr, 2), "t_mt": round(t_mt, 2),
-                "dur": round(len(audio) / SAMPLE_RATE, 1),
-            })
+            translations = ENGINES.translate_pairs([(k[2].lang, k[4]) for k in keep])
+            t_mt = round((time.perf_counter() - t0) / len(keep), 2)
+
+            for (kind, audio, c, utt, text), translation in zip(keep, translations):
+                if kind == "partial":
+                    last_partial[c.name] = text
+                else:
+                    last_partial.pop(c.name, None)
+                ROOM.broadcast_threadsafe({
+                    "type": kind, "id": f"{c.name}#{utt}", "name": c.name,
+                    "lang": c.lang, "text": text, "translation": translation,
+                    "t_asr": t_asr, "t_mt": t_mt,
+                    "dur": round(len(audio) / SAMPLE_RATE, 1),
+                })
         except Exception as e:
             print(f"Loi worker: {type(e).__name__}: {e}")
 

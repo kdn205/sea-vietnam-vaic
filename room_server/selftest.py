@@ -8,6 +8,7 @@ import json
 import os
 import ssl
 import sys
+import time
 
 import numpy as np
 
@@ -64,15 +65,18 @@ async def phone(name, lang, file_ids, results):
 
 async def main():
     results = []
-    print("2 'dien thoai' vao room: Giap (vi) + Sarah (en)\n")
+    print("3 'dien thoai' NOI CUNG LUC: Giap (vi) + Sarah (en) + Nam (vi)\n")
+    t0 = time.perf_counter()
     await asyncio.gather(
         phone("Giap", "vi", ["vi1", "vi4"], results),
         phone("Sarah", "en", ["en3", "en4"], results),
+        phone("Nam", "vi", ["vi5", "vi6"], results),
     )
     uniq = {m["id"] for m in results}
-    print(f"\nNhan duoc {len(uniq)} cau final (qua broadcast toi cac client).")
-    ok = len(uniq) >= 4
-    print("SELFTEST " + ("PASS" if ok else "FAIL (mong doi >= 4 cau)"))
+    print(f"\nNhan duoc {len(uniq)} cau final tu 3 nguoi noi dong thoi "
+          f"(tong {time.perf_counter()-t0:.0f}s).")
+    ok = len(uniq) >= 6
+    print("SELFTEST " + ("PASS" if ok else "FAIL (mong doi >= 6 cau)"))
 
 
 if __name__ == "__main__":
