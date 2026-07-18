@@ -1,4 +1,4 @@
-# Báo cáo dự án: Real-time Vietnamese–English Business Meeting Translator
+/# Báo cáo dự án: Real-time Vietnamese–English Business Meeting Translator
 
 > Hackathon AI 2 ngày — Vietnam AI Innovation Challenge, tài trợ bởi AI Singapore (AISG)
 > Tài liệu tổng hợp toàn bộ quá trình nghiên cứu → thử nghiệm → sản phẩm (cập nhật 18/07/2026)
