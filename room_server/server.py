@@ -178,11 +178,13 @@ class Room:
         self.log_path = os.path.join(
             HERE, "logs", f"hop_{rid}_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
         self.empty_since = None     # thoi diem room trong (de tu mo phien moi)
+        self.last_summary = None    # tom tat AI gan nhat (dinh vao bien ban)
 
     EMPTY_RESET_S = 120  # room trong qua 2 phut -> cuoc hop moi, xoa bien ban cu
 
     def new_session(self):
         self.history = []
+        self.last_summary = None
         self.started = time.strftime("%Y-%m-%d %H:%M")
         self.log_path = os.path.join(
             HERE, "logs", f"hop_{self.id}_{time.strftime('%Y%m%d_%H%M%S')}.jsonl")
@@ -518,6 +520,29 @@ def summarize_history(room):
 def build_transcript_md(room):
     lines = [f"# Biên bản họp — phòng {room.id} — {room.started}",
              f"Thành viên: {', '.join(sorted({h['name'] for h in room.history}))}", ""]
+
+    # thong ke phat bieu: ai noi bao nhieu cau / bao lau / ty le
+    stats = {}
+    for h in room.history:
+        s = stats.setdefault(h["name"], {"n": 0, "dur": 0.0, "lang": h["lang"]})
+        s["n"] += 1
+        s["dur"] += h.get("dur", 0) or 0
+    total_dur = sum(s["dur"] for s in stats.values()) or 1
+    lines += ["## 📊 Thống kê phát biểu", "",
+              "| Người nói | Ngôn ngữ | Số câu | Thời lượng | Tỷ lệ |",
+              "|---|---|---|---|---|"]
+    for name, s in sorted(stats.items(), key=lambda kv: -kv[1]["dur"]):
+        flag = "🇻🇳" if s["lang"] == "vi" else "🇬🇧"
+        lines.append(f"| {name} | {flag} | {s['n']} | {s['dur']:.0f}s "
+                     f"| {100 * s['dur'] / total_dur:.0f}% |")
+    lines.append("")
+
+    # dinh tom tat AI gan nhat (neu da bam Tom tat trong hop)
+    if room.last_summary:
+        lines += ["## 📝 Tóm tắt (AI local)", "", room.last_summary, ""]
+
+    lines.append("## 💬 Nội dung chi tiết")
+    lines.append("")
     for h in room.history:
         flag = "VN" if h["lang"] == "vi" else "EN"
         lines.append(f"**[{h['time']}] {h['name']} [{flag}]**: {h['text']}")
@@ -603,6 +628,7 @@ async def summary_endpoint(room: str = ""):
         text = await asyncio.to_thread(summarize_history, r)
     except Exception as e:
         return {"error": f"Lỗi tóm tắt: {type(e).__name__}: {e}"}
+    r.last_summary = text
     await r.broadcast({"type": "summary", "text": text,
                        "time": time.strftime("%H:%M:%S")})
     return {"ok": True, "text": text}

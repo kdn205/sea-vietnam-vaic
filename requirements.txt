@@ -33,3 +33,4 @@ edge-tts                   # sinh audio test tieng Viet/Anh khong can mic
 # --- Export model cho mobile (tuy chon) ---
 # optimum[onnxruntime]     # export envit5 -> ONNX int8 (models/quantize_envit5.py)
 # torch                    # can cho export + benchmark GPU (xem ghi chu dau file)
+qrcode                     # QR moi vao phong
