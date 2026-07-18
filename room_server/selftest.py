@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """Gia lap 2 dien thoai join room va noi (khong can mic).
 Chay server truoc: python server.py   (o cua so khac)
 Roi:               python selftest.py [wss URL, mac dinh ws://localhost:8000/ws]
@@ -46,16 +46,16 @@ async def phone(name, lang, file_ids, results):
 
         # 0.6s nhieu nen de VAD chinh nguong
         for _ in range(20):
-            await ws.send((np.random.randn(640).astype(np.float32) * 1e-4).tobytes())
+            await ws.send(((np.random.randn(640) * 1e-4 * 32768).astype(np.int16)).tobytes())
             await asyncio.sleep(0.01)
 
         for fid in file_ids:
             audio = load_audio(os.path.join(BENCH, "audio", f"{fid}.mp3"))
             for i in range(0, len(audio), 1600):
-                await ws.send(np.ascontiguousarray(audio[i:i + 1600]).tobytes())
+                await ws.send((np.clip(audio[i:i + 1600] * 32768, -32768, 32767).astype(np.int16)).tobytes())
                 await asyncio.sleep(0.01)
             for _ in range(12):  # im lang -> ket thuc cau
-                await ws.send(np.zeros(1600, dtype=np.float32).tobytes())
+                await ws.send(np.zeros(1600, dtype=np.int16).tobytes())
                 await asyncio.sleep(0.01)
             await asyncio.sleep(1.0)
 

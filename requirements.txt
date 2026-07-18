@@ -1,0 +1,35 @@
+# Real-time VI-EN Meeting Translator — full stack requirements
+# Python 3.11 khuyen nghi. Cai dat:
+#   pip install -r requirements.txt
+# GPU (tuy chon, cho tang dich CT2 tren CUDA): can torch ban cu126 —
+#   pip install torch --index-url https://download.pytorch.org/whl/cu126
+# (khong co GPU van chay duoc: MT tu fallback CPU int8)
+
+# --- ASR + VAD (room server & mobile-parity) ---
+sherpa-onnx>=1.13          # zipformer vi/en, chay CPU, co ban Android/iOS/Flutter
+faster-whisper>=1.2        # ban desktop live_demo (whisper/PhoWhisper CT2)
+
+# --- Dich may ---
+ctranslate2>=4.8           # chay envit5-ct2 int8 (convert: ct2-transformers-converter)
+transformers<5             # tokenizer envit5 (ban 5.x vo tokenizer T5 cu)
+sentencepiece
+
+# --- Room server (web + WebSocket + HTTPS) ---
+fastapi
+uvicorn[standard]
+websockets
+cryptography               # tao cert HTTPS tu ky (make_cert.py)
+
+# --- Audio ---
+sounddevice>=0.5           # thu mic (ban desktop)
+numpy
+av                         # decode mp3/wav cho benchmark & selftest
+
+# --- Benchmark & danh gia ---
+jiwer                      # WER
+sacrebleu                  # chrF / BLEU
+edge-tts                   # sinh audio test tieng Viet/Anh khong can mic
+
+# --- Export model cho mobile (tuy chon) ---
+# optimum[onnxruntime]     # export envit5 -> ONNX int8 (models/quantize_envit5.py)
+# torch                    # can cho export + benchmark GPU (xem ghi chu dau file)

@@ -38,15 +38,21 @@ MAX_SPEECH_S = 15.0
 ZIP_VI = os.path.join(MODELS, "sherpa-onnx-zipformer-vi-int8-2025-04-20")
 ZIP_EN = os.path.join(MODELS, "sherpa-onnx-zipformer-gigaspeech-2023-12-12")
 ENVIT5_CT2 = os.path.join(MODELS, "envit5-ct2")
+ENVIT5_CT2_F32 = os.path.join(MODELS, "envit5-ct2-f32")
 
 
 # ----------------------------- Engines -----------------------------
 
 class Engines:
-    def __init__(self):
+    def __init__(self, mt_precision="int8"):
         import ctranslate2
         import sherpa_onnx
         from transformers import AutoTokenizer
+
+        self.mt_precision = mt_precision
+        mt_dir = ENVIT5_CT2_F32 if mt_precision == "float32" else ENVIT5_CT2
+        mt_ct_gpu = "float32" if mt_precision == "float32" else "int8_float16"
+        mt_ct_cpu = "float32" if mt_precision == "float32" else "int8"
 
         print("Nap zipformer-vi ...")
         self.asr = {
@@ -74,18 +80,18 @@ class Engines:
             if os.path.isdir(lib):
                 os.add_dll_directory(lib)
             if torch.cuda.is_available():
-                self.mt = ctranslate2.Translator(ENVIT5_CT2, device="cuda",
-                                                 compute_type="int8_float16")
+                self.mt = ctranslate2.Translator(mt_dir, device="cuda",
+                                                 compute_type=mt_ct_gpu)
                 self.translate("vi", "khởi động")
-                print("MT chay tren GPU.")
+                print(f"MT chay tren GPU ({mt_precision}).")
         except Exception as e:
             print(f"MT GPU khong dung duoc ({type(e).__name__}) -> CPU")
             self.mt = None
         if self.mt is None:
-            self.mt = ctranslate2.Translator(ENVIT5_CT2, device="cpu",
-                                             compute_type="int8", intra_threads=4)
+            self.mt = ctranslate2.Translator(mt_dir, device="cpu",
+                                             compute_type=mt_ct_cpu, intra_threads=4)
             self.translate("vi", "khởi động")
-        print("Engines san sang.")
+        print(f"Engines san sang (MT={mt_precision}).")
 
     def recognize_batch(self, lang, audios):
         """Nhan dang NHIEU doan audio cung ngon ngu trong 1 lan decode."""
@@ -112,11 +118,11 @@ class Engines:
             out.append(text)
         return out
 
-    def translate_pairs(self, pairs):
+    def translate_pairs(self, pairs, beam_size=1):
         """Dich NHIEU cau (src_lang, text) trong 1 lan goi batch."""
         toks = [self.mt_tok.convert_ids_to_tokens(self.mt_tok.encode(f"{s}: {t}"))
                 for s, t in pairs]
-        res = self.mt.translate_batch(toks, beam_size=1, max_decoding_length=256)
+        res = self.mt.translate_batch(toks, beam_size=beam_size, max_decoding_length=256)
         outs = []
         for r in res:
             ids = self.mt_tok.convert_tokens_to_ids(r.hypotheses[0])
@@ -146,6 +152,7 @@ class Client:
         self.threshold = 0.0015
         self.utt = 0
         self.last_level_t = 0.0     # lan cuoi gui level ve client
+        self.cur_ratio = 0.0        # muc tin hieu hien tai / nguong (de so ai troi hon)
 
     @property
     def uid(self):
@@ -208,6 +215,8 @@ def feed_audio(c: Client, chunk: np.ndarray):
             asyncio.run_coroutine_threadsafe(
                 _send_level(c, rms), ROOM.loop)
 
+    c.cur_ratio = 0.6 * c.cur_ratio + 0.4 * (rms / max(c.threshold, 1e-6))
+
     if not c.speaking:
         c.preroll.append(chunk)
         c.preroll_s += dur
@@ -215,6 +224,12 @@ def feed_audio(c: Client, chunk: np.ndarray):
             c.preroll_s -= len(c.preroll[0]) / SAMPLE_RATE
             c.preroll.pop(0)
         if rms > c.threshold:
+            # cong "ai troi hon": neu co nguoi khac dang noi voi tin hieu manh
+            # gap doi tro len -> day chi la giong ho lot sang mic minh, bo qua
+            others = [o.cur_ratio for o in ROOM.clients.values()
+                      if o is not c and o.speaking]
+            if others and c.cur_ratio < 0.5 * max(others):
+                return
             c.speaking = True
             c.utt += 1
             c.buf = list(c.preroll)
@@ -234,6 +249,11 @@ def feed_audio(c: Client, chunk: np.ndarray):
 
         if c.silence_s >= SILENCE_END_S or c.speech_s >= MAX_SPEECH_S:
             audio = np.concatenate(c.buf)
+            # cat duoi im lang (giu 0.15s): decode nhanh hon va tranh ASR
+            # ao giac them tu vao khoang lang cuoi cau
+            cut = int(max(0.0, c.silence_s - 0.15) * SAMPLE_RATE)
+            if 0 < cut < len(audio):
+                audio = audio[:-cut]
             with ROOM.lock:
                 ROOM.partials.pop(c.name, None)
             if c.speech_s - c.silence_s >= MIN_SPEECH_S:
@@ -253,10 +273,16 @@ async def _send_level(c: Client, rms: float):
 
 # ----------------------------- Worker -----------------------------
 
+def _too_similar(a, b):
+    import difflib
+    return difflib.SequenceMatcher(None, a.lower(), b.lower()).ratio() > 0.65
+
+
 def worker():
     """Gom TAT CA nguoi dang cho vao mot batch: nhieu nguoi noi cung luc
     thi chi phi ~1.4x mot nguoi thay vi Nx (ASR decode_streams + MT batch)."""
     last_partial = {}   # client name -> text nhap gan nhat (bo dich lai nhap trung)
+    recent_finals = []  # (timestamp, name, text) de loc cau "nghe ke" tu mic hang xom
     while True:
         jobs = []  # (kind, audio, client, utt)
         try:
@@ -288,7 +314,9 @@ def worker():
                         texts[i] = t
             t_asr = round((time.perf_counter() - t0) / len(jobs), 2)
 
-            # --- loc rac + nhap trung ---
+            # --- loc rac + nhap trung + cau "nghe ke" tu mic nguoi ngoi canh ---
+            now = time.time()
+            recent_finals[:] = [r for r in recent_finals if now - r[0] < 5.0]
             keep = []
             for i, (kind, audio, c, utt) in enumerate(jobs):
                 text = texts[i]
@@ -298,13 +326,35 @@ def worker():
                     continue
                 if kind == "partial" and last_partial.get(c.name) == text:
                     continue
+                if kind == "final":
+                    # 2 mic ra cau gan giong nhau = 1 nguoi noi lot vao mic
+                    # hang xom -> GIU BAN TIN HIEU MANH HON (bat ke den truoc sau)
+                    rms = float(np.sqrt(np.mean(audio ** 2)))
+                    dup = next((r for r in recent_finals
+                                if r[1] != c.name and _too_similar(r[2], text)), None)
+                    if dup is not None:
+                        if rms <= dup[3]:
+                            ROOM.broadcast_threadsafe(
+                                {"type": "drop", "id": f"{c.name}#{utt}"})
+                            continue
+                        # ban moi manh hon -> xoa bubble cua ban yeu da hien
+                        ROOM.broadcast_threadsafe({"type": "drop", "id": dup[4]})
+                        recent_finals.remove(dup)
+                    recent_finals.append((now, c.name, text, rms, f"{c.name}#{utt}"))
                 keep.append((kind, audio, c, utt, text))
             if not keep:
                 continue
 
-            # --- MT ca loat trong 1 lan goi ---
+            # --- MT: ban chot beam 4 (chat luong), ban nhap beam 1 (toc do) ---
             t0 = time.perf_counter()
-            translations = ENGINES.translate_pairs([(k[2].lang, k[4]) for k in keep])
+            translations = [None] * len(keep)
+            for beam, kinds in ((4, ("final",)), (1, ("partial",))):
+                idxs = [i for i, k in enumerate(keep) if k[0] in kinds]
+                if idxs:
+                    outs = ENGINES.translate_pairs(
+                        [(keep[i][2].lang, keep[i][4]) for i in idxs], beam_size=beam)
+                    for i, o in zip(idxs, outs):
+                        translations[i] = o
             t_mt = round((time.perf_counter() - t0) / len(keep), 2)
 
             for (kind, audio, c, utt, text), translation in zip(keep, translations):
@@ -352,7 +402,8 @@ async def ws_endpoint(ws: WebSocket):
                     await ROOM.broadcast({"type": "roster", "members": ROOM.roster()})
                     print(f"+ {name} ({lang}) vao room ({len(ROOM.clients)} nguoi)")
             elif msg.get("bytes") is not None and client is not None:
-                chunk = np.frombuffer(msg["bytes"], dtype=np.float32)
+                # client gui PCM int16 (tiet kiem 1 nua bang thong so voi float32)
+                chunk = np.frombuffer(msg["bytes"], dtype=np.int16).astype(np.float32) / 32768.0
                 feed_audio(client, chunk)
             elif msg.get("type") == "websocket.disconnect":
                 break
@@ -384,7 +435,12 @@ def local_ips():
 
 def main():
     global ENGINES
-    ENGINES = Engines()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--mt", choices=["int8", "float32"], default="int8",
+                        help="do chinh xac model dich (int8 nhanh/nhe, float32 de doi chieu)")
+    args = parser.parse_args()
+    ENGINES = Engines(mt_precision=args.mt)
     threading.Thread(target=worker, daemon=True).start()
 
     import uvicorn

@@ -67,6 +67,15 @@
 
 <script>
 let ws, ctx, node, stream, myName, myLang, micOn = false, maxPeak = 0, micStartT = 0, micDead = false;
+let joined = false, wakeLock = null;
+
+async function keepAwake() {
+  // giu man hinh dien thoai khong tat khi dang trong room
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && joined) keepAwake();
+});
 
 async function fillMics() {
   // xin quyen truoc de enumerateDevices tra ve ten thiet bi day du
@@ -97,10 +106,15 @@ function setStatus(t) { el('status').textContent = t; }
 function join() {
   myName = el('name').value.trim() || 'khach';
   myLang = el('lang').value;
+  connect(false);
+}
+
+function connect(isReconnect) {
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
   ws.binaryType = 'arraybuffer';
   ws.onopen = () => {
     ws.send(JSON.stringify({type: 'join', name: myName, lang: myLang}));
+    joined = true;
     el('joinbox').style.display = 'none';
     el('hdr').style.display = 'flex';
     el('microw').style.display = 'block';
@@ -108,11 +122,17 @@ function join() {
     // mac dinh doc bang ngon ngu minh noi; doi duoc bat cu luc nao
     el('displang').value = localStorage.getItem('dispLang') || myLang;
     el('displang').onchange = () => localStorage.setItem('dispLang', el('displang').value);
-    setStatus('Đã vào room. Bấm 🎙 để nói.');
-    fillMics();
+    setStatus(isReconnect ? 'Đã kết nối lại.' : 'Đã vào room. Bấm 🎙 để nói.');
+    keepAwake();
+    if (!isReconnect) fillMics();
   };
   ws.onmessage = e => handle(JSON.parse(e.data));
-  ws.onclose = () => setStatus('Mất kết nối — tải lại trang để vào lại.');
+  ws.onclose = () => {
+    if (!joined) return;
+    // tu ket noi lai (dien thoai khoa man hinh / chap mang)
+    setStatus('Mất kết nối — đang thử kết nối lại...');
+    setTimeout(() => connect(true), 2000);
+  };
   ws.onerror = () => { el('joinerr').textContent = 'Không kết nối được server.'; };
 }
 
@@ -151,7 +171,10 @@ function handle(m) {
   b.innerHTML = `<div class="meta">${m.name} [${flag}]${timing}</div>` +
                 `<div class="main">${esc(mainText)}</div>` +
                 `<div class="sub">${esc(subText)}</div>`;
-  el('feed').scrollTop = el('feed').scrollHeight;
+  // hop dai: giu 150 bubble gan nhat de trang khong nang dan
+  const feed = el('feed');
+  while (feed.children.length > 150) feed.removeChild(feed.firstChild);
+  feed.scrollTop = feed.scrollHeight;
 }
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
@@ -171,7 +194,7 @@ async function toggleMic() {
     // echoCancellation tat: no chuyen xoa am thanh phat tu loa cung may
     // (lam hong test mo audio qua loa); autoGainControl bu mic yeu
     const micId = el('micsel').value;
-    const cons = {echoCancellation: false, noiseSuppression: false, autoGainControl: true};
+    const cons = {echoCancellation: false, noiseSuppression: true, autoGainControl: true};
     if (micId) cons.deviceId = {exact: micId};
     stream = await navigator.mediaDevices.getUserMedia({audio: cons});
   } catch (err) {
@@ -186,10 +209,12 @@ async function toggleMic() {
   node.onaudioprocess = ev => {
     if (!micOn || ws.readyState !== 1) return;
     const inp = ev.inputBuffer.getChannelData(0);
-    const out = new Float32Array(Math.floor(inp.length / ratio));
+    // gui PCM int16: bang thong giam mot nua so voi float32
+    const out = new Int16Array(Math.floor(inp.length / ratio));
     for (let i = 0; i < out.length; i++) {
-      out[i] = inp[Math.floor(i * ratio)];
-      const a = Math.abs(out[i]); if (a > maxPeak) maxPeak = a;
+      const v = inp[Math.floor(i * ratio)];
+      const a = Math.abs(v); if (a > maxPeak) maxPeak = a;
+      out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32768)));
     }
     // canh bao mic cam: 3s ma tin hieu van ~0 -> mic nay chet, doi mic khac
     if (Date.now() - micStartT > 3000 && maxPeak < 0.002) {
