@@ -528,7 +528,7 @@ def build_transcript_md(room):
 
 # ----------------------------- FastAPI -----------------------------
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.responses import FileResponse, Response  # noqa: E402
 
 app = FastAPI()
@@ -553,6 +553,23 @@ async def icon():
            '<rect width="100" height="100" rx="22" fill="#0b57d0"/>'
            '<text x="50" y="66" font-size="46" text-anchor="middle">🌐</text></svg>')
     return Response(svg, media_type="image/svg+xml")
+
+
+@app.get("/qr")
+async def qr(request: Request, room: str = ""):
+    """QR chua link moi vao phong — nguoi khac quet la vao thang."""
+    import io
+
+    import qrcode
+    import qrcode.image.svg
+
+    host = request.headers.get("host", "localhost:8443")
+    link = f"https://{host}/#{room.strip().upper()}"
+    img = qrcode.make(link, image_factory=qrcode.image.svg.SvgPathImage,
+                      box_size=14, border=2)
+    buf = io.BytesIO()
+    img.save(buf)
+    return Response(buf.getvalue(), media_type="image/svg+xml")
 
 
 @app.get("/transcript")

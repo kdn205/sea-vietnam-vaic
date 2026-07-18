@@ -212,7 +212,7 @@
 
 <!-- ============ MEETING ============ -->
 <header id="hdr">
-  <button class="rpill" onclick="copyRoom()"><span id="roomchip">·····</span><small>📋</small></button>
+  <button class="rpill" onclick="showQR()"><span id="roomchip">·····</span><small>▦</small></button>
   <div class="mid">
     <div class="live off" id="livechip"><span class="dot"></span><span id="livetext">Mic tắt</span></div>
     <div class="who" id="roster"></div>
@@ -227,6 +227,21 @@
 
 <div id="toast"></div>
 <div id="micwrap"><button id="micbtn" onclick="toggleMic()">🎙</button></div>
+
+<!-- modal QR moi vao phong -->
+<div id="qrmodal" style="display:none; position:fixed; inset:0; z-index:28;
+     background:rgba(10,12,20,.55); backdrop-filter:blur(4px);"
+     onclick="this.style.display='none'">
+  <div style="max-width:320px; margin:12vh auto 0; background:#fff; border-radius:24px;
+       padding:26px 22px; text-align:center;" onclick="event.stopPropagation()">
+    <div style="font-weight:800; font-size:15px; color:#5b45f2; letter-spacing:3px"
+         id="qrcode-label"></div>
+    <div style="font-size:12px; color:#8b93a7; margin:4px 0 14px">Quét QR để vào phòng</div>
+    <img id="qrimg" style="width:220px; height:220px; border-radius:12px" alt="QR">
+    <button class="cta" style="margin-top:16px; background:var(--grad); color:#fff; box-shadow:none"
+            onclick="copyRoom()">📋 Copy link mời</button>
+  </div>
+</div>
 
 <div id="shade" onclick="closeSheet()"></div>
 <div id="sheet">
@@ -334,6 +349,11 @@ function enterMeeting() {
   fillMics();
 }
 
+function showQR() {
+  el('qrcode-label').textContent = 'PHÒNG ' + roomId;
+  el('qrimg').src = '/qr?room=' + roomId;
+  el('qrmodal').style.display = 'block';
+}
 function copyRoom() {
   const link = location.origin + '/#' + roomId;
   (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
