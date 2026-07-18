@@ -1,6 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HeaderControls } from '@/components/ui/header-controls';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
@@ -15,26 +16,35 @@ export function SessionTopBar({ sessionId, peopleCount, leaveLabel, onLeave, onO
   const theme = useTheme();
 
   return (
-    <View style={[styles.bar, { backgroundColor: theme.primary }]}>
-      <Pressable onPress={onOpenHistory} hitSlop={10}>
-        <SymbolView
-          name={{ ios: 'clock', android: 'history', web: 'history' }}
-          tintColor="#FFFFFF"
-          size={18}
-        />
-      </Pressable>
-      <Text style={styles.sessionId}>Session ID: {sessionId}</Text>
-      <View style={styles.right}>
-        <View style={styles.peopleChip}>
+    <View style={[styles.bar, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <View style={styles.left}>
+        <Pressable
+          onPress={onOpenHistory}
+          hitSlop={10}
+          style={[styles.iconButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+        >
           <SymbolView
-            name={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
-            tintColor="#FFFFFF"
-            size={14}
+            name={{ ios: 'clock', android: 'history', web: 'history' }}
+            tintColor={theme.textSecondary}
+            size={16}
           />
-          <Text style={styles.peopleCount}>{peopleCount}</Text>
+        </Pressable>
+        <View>
+          <Text style={[styles.sessionId, { color: theme.text }]}>Session {sessionId}</Text>
+          <View style={styles.peopleChip}>
+            <SymbolView
+              name={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
+              tintColor={theme.textSecondary}
+              size={11}
+            />
+            <Text style={[styles.peopleCount, { color: theme.textSecondary }]}>{peopleCount}</Text>
+          </View>
         </View>
-        <Pressable onPress={onLeave} style={styles.leaveButton}>
-          <Text style={[styles.leaveLabel, { color: theme.primary }]}>{leaveLabel}</Text>
+      </View>
+      <View style={styles.right}>
+        <HeaderControls />
+        <Pressable onPress={onLeave} style={[styles.leaveButton, { backgroundColor: theme.primary }]}>
+          <Text style={styles.leaveLabel}>{leaveLabel}</Text>
         </Pressable>
       </View>
     </View>
@@ -46,15 +56,30 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     paddingVertical: 10,
-    borderRadius: 14,
+    borderRadius: 16,
+    borderWidth: 1,
     marginBottom: 12,
+    gap: 8,
+  },
+  left: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexShrink: 1,
+  },
+  iconButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sessionId: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
   },
   right: {
     flexDirection: 'row',
@@ -65,19 +90,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+    marginTop: 2,
   },
   peopleCount: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '600',
   },
   leaveButton: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
     borderRadius: 999,
   },
   leaveLabel: {
+    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: '700',
   },

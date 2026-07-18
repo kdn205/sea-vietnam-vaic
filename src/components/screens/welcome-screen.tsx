@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 
 import { HintBanner } from '@/components/ui/hint-banner';
 import { GhostButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { HeaderControls } from '@/components/ui/header-controls';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 
@@ -28,7 +29,7 @@ export function WelcomeScreen({
   statusMessage,
 }: Props) {
   const theme = useTheme();
-  const { t, lang, setLang } = useI18n();
+  const { t } = useI18n();
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.background }}>
@@ -44,17 +45,7 @@ export function WelcomeScreen({
         />
       </Pressable>
 
-      <Pressable
-        style={[styles.languageIcon, { backgroundColor: theme.card, borderColor: theme.border }]}
-        onPress={() => setLang(lang === 'en' ? 'vi' : 'en')}
-        hitSlop={8}
-      >
-        <SymbolView
-          name={{ ios: 'globe', android: 'language', web: 'language' }}
-          tintColor={theme.textSecondary}
-          size={18}
-        />
-      </Pressable>
+      <HeaderControls style={styles.headerControls} />
 
       <ScrollView
         contentContainerStyle={styles.container}
@@ -179,17 +170,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     textAlign: 'center',
   },
-  languageIcon: {
+  headerControls: {
     position: 'absolute',
     top: 12,
     right: 16,
     zIndex: 1,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   historyIcon: {
     position: 'absolute',
