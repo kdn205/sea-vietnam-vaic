@@ -2,154 +2,269 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="theme-color" content="#0b57d0">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#4b2fd6">
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg">
 <link rel="apple-touch-icon" href="/icon.svg">
-<title>Room Dịch Họp — Việt ⇄ English</title>
+<title>Lingo Room — Việt ⇄ English</title>
 <style>
-  * { box-sizing: border-box; margin: 0; -webkit-tap-highlight-color: transparent; }
-  :root { --blue: #0b57d0; --blue2: #1a73e8; --bg: #f2f4f8; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg);
-         height: 100dvh; display: flex; flex-direction: column; }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --grad: linear-gradient(135deg, #6a5cff 0%, #4b2fd6 55%, #3a1fb8 100%);
+    --acc: #5b45f2; --acc2: #6a5cff;
+    --bg: #f4f5fa; --ink: #171a23; --mut: #8b93a7;
+    --card: #ffffff; --line: #e8eaf2;
+  }
+  html, body { height: 100%; }
+  body { font-family: -apple-system, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif;
+         background: var(--bg); color: var(--ink); height: 100dvh;
+         display: flex; flex-direction: column; overflow: hidden; }
+  button { font-family: inherit; }
 
-  /* ---------- Landing ---------- */
-  #landing { position: fixed; inset: 0; overflow-y: auto; z-index: 10;
-             background: linear-gradient(160deg, #0b57d0 0%, #083a8c 60%, #062b66 100%); }
-  .land-wrap { max-width: 440px; margin: 0 auto; padding: 42px 22px; }
-  .logo { font-size: 44px; }
-  .land-wrap h1 { color: #fff; font-size: 26px; margin: 8px 0 2px; }
-  .land-wrap .sub { color: #b9ccf3; font-size: 14px; margin-bottom: 26px; }
-  .card { background: #fff; border-radius: 16px; padding: 18px; margin-bottom: 16px;
-          box-shadow: 0 6px 24px rgba(0,0,0,.18); }
-  .card h3 { font-size: 16px; color: #0b57d0; margin-bottom: 12px; }
-  .field { width: 100%; font-size: 16px; padding: 12px; border: 1.5px solid #d5dbe6;
-           border-radius: 10px; margin-bottom: 10px; background: #fafbfd; }
-  .field:focus { outline: none; border-color: var(--blue2); }
-  .btn { width: 100%; font-size: 16px; font-weight: 700; padding: 13px; border: none;
-         border-radius: 10px; background: var(--blue2); color: #fff; cursor: pointer; }
-  .btn:active { transform: scale(.98); }
-  .btn.ghost { background: #eef3fd; color: var(--blue); }
-  .code-input { text-transform: uppercase; letter-spacing: 6px; text-align: center;
-                font-weight: 700; font-size: 20px; }
-  #landerr { color: #ffb4ab; font-size: 14px; min-height: 20px; margin-top: 4px;
-             text-align: center; }
-  .offline-note { color: #8fb0ea; font-size: 12px; text-align: center; margin-top: 14px; }
+  /* ================= LANDING ================= */
+  #landing { position: fixed; inset: 0; z-index: 30; overflow-y: auto;
+             background: var(--grad); }
+  #landing::before, #landing::after { content: ''; position: fixed; border-radius: 50%;
+             filter: blur(70px); opacity: .35; pointer-events: none; }
+  #landing::before { width: 340px; height: 340px; background: #9f8bff; top: -120px; right: -100px; }
+  #landing::after  { width: 280px; height: 280px; background: #2b6bff; bottom: -80px; left: -90px; }
+  .land { position: relative; max-width: 420px; margin: 0 auto;
+          padding: max(44px, env(safe-area-inset-top)) 24px 44px; }
+  .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 34px; }
+  .brand .mark { width: 52px; height: 52px; border-radius: 16px; background: rgba(255,255,255,.14);
+                 backdrop-filter: blur(8px); display: grid; place-items: center; font-size: 27px;
+                 border: 1px solid rgba(255,255,255,.22); }
+  .brand h1 { color: #fff; font-size: 23px; font-weight: 800; letter-spacing: -.3px; }
+  .brand p { color: rgba(255,255,255,.75); font-size: 12.5px; margin-top: 2px; }
 
-  /* ---------- Meeting ---------- */
-  header { background: var(--blue); color: #fff; padding: 10px 14px;
-           display: none; align-items: center; gap: 10px; }
-  .room-chip { background: rgba(255,255,255,.16); border-radius: 8px; padding: 5px 10px;
-               font-weight: 800; letter-spacing: 2px; font-size: 15px; cursor: pointer; }
-  header .info { flex: 1; min-width: 0; }
-  header .title { font-weight: 700; font-size: 15px; }
-  header .roster { font-size: 11px; opacity: .85; white-space: nowrap;
-                   overflow: hidden; text-overflow: ellipsis; }
-  .iconbtn { background: rgba(255,255,255,.14); border: none; color: #fff;
-             font-size: 17px; border-radius: 9px; padding: 8px 10px; cursor: pointer; }
-  #toolrow { display: none; gap: 6px; padding: 8px 10px; background: #fff;
-             border-bottom: 1px solid #e3e7ee; flex-wrap: wrap; align-items: center;
-             font-size: 13px; }
-  #toolrow select, #toolrow button { font-size: 13px; padding: 6px 8px;
-             border-radius: 8px; border: 1px solid #cfd6e0; background: #fff; }
-  .level { height: 4px; background: #e0e0e0; overflow: hidden; display: none; }
-  .level > div { height: 100%; width: 0; background: #34a853; transition: width .1s; }
-  #feed { flex: 1; overflow-y: auto; padding: 12px 12px 96px; display: none; }
-  .bubble { background: #fff; border-radius: 14px; padding: 11px 13px; margin-bottom: 10px;
-            box-shadow: 0 1px 3px rgba(15,30,60,.08); max-width: 760px; }
-  .bubble.mine { border-left: 4px solid var(--blue2); }
-  .bubble.partial { opacity: .55; font-style: italic; }
-  .bubble.summary { border-left: 4px solid #f9ab00; background: #fffbf0;
-                    white-space: pre-wrap; }
-  .meta { font-size: 11px; color: #8a93a3; margin-bottom: 4px; }
-  .main { font-size: 17px; font-weight: 600; color: #14181f; }
-  .sub  { font-size: 13px; color: #667085; margin-top: 3px; }
-  #status { font-size: 12px; color: #8a93a3; padding: 4px 14px 6px; display: none; }
+  .glass { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.18);
+           backdrop-filter: blur(14px); border-radius: 22px; padding: 20px; margin-bottom: 16px; }
+  .glass label { display: block; color: rgba(255,255,255,.85); font-size: 12px;
+                 font-weight: 700; letter-spacing: .6px; margin: 2px 0 8px; }
+  .tf { width: 100%; font-size: 16px; padding: 14px 16px; border-radius: 14px;
+        border: 1.5px solid rgba(255,255,255,.25); background: rgba(255,255,255,.92);
+        color: var(--ink); outline: none; }
+  .tf::placeholder { color: #a7adbd; }
+  .tf:focus { border-color: #fff; }
 
-  /* mic FAB */
-  #micwrap { position: fixed; left: 0; right: 0; bottom: 18px; display: none;
-             justify-content: center; pointer-events: none; }
-  #micbtn { pointer-events: auto; width: 72px; height: 72px; border-radius: 50%;
-            border: none; background: var(--blue2); color: #fff; font-size: 30px;
-            box-shadow: 0 6px 20px rgba(11,87,208,.45); cursor: pointer; }
-  #micbtn.rec { background: #d93025; animation: pulse 1.6s infinite; }
-  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(217,48,37,.45); }
-                     70% { box-shadow: 0 0 0 20px rgba(217,48,37,0); }
-                     100% { box-shadow: 0 0 0 0 rgba(217,48,37,0); } }
+  .seg { display: flex; background: rgba(255,255,255,.14); border-radius: 14px;
+         padding: 4px; margin-top: 10px; }
+  .seg button { flex: 1; border: none; border-radius: 11px; padding: 11px 6px;
+                font-size: 14px; font-weight: 700; color: rgba(255,255,255,.8);
+                background: transparent; cursor: pointer; transition: all .18s; }
+  .seg button.on { background: #fff; color: var(--acc); box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+
+  .cta { width: 100%; margin-top: 18px; padding: 16px; border: none; border-radius: 16px;
+         background: #fff; color: var(--acc); font-size: 16.5px; font-weight: 800;
+         cursor: pointer; box-shadow: 0 8px 26px rgba(0,0,0,.25); transition: transform .12s; }
+  .cta:active { transform: scale(.97); }
+
+  .or { display: flex; align-items: center; gap: 12px; color: rgba(255,255,255,.5);
+        font-size: 12px; font-weight: 700; margin: 20px 0 14px; }
+  .or::before, .or::after { content: ''; flex: 1; height: 1px; background: rgba(255,255,255,.22); }
+
+  .joinrow { display: flex; gap: 10px; }
+  .code { flex: 1; text-transform: uppercase; letter-spacing: 8px; text-align: center;
+          font-weight: 800; font-size: 20px; }
+  .go { width: 58px; border: none; border-radius: 14px; font-size: 22px; cursor: pointer;
+        background: rgba(255,255,255,.22); color: #fff; border: 1px solid rgba(255,255,255,.3); }
+  #landerr { color: #ffd4cf; font-size: 13.5px; min-height: 20px; margin-top: 14px; text-align: center; }
+  .foot { color: rgba(255,255,255,.55); font-size: 11.5px; text-align: center;
+          margin-top: 18px; line-height: 1.6; }
+
+  /* ================= MEETING ================= */
+  #hdr { display: none; align-items: center; gap: 10px;
+         padding: calc(10px + env(safe-area-inset-top)) 14px 10px;
+         background: rgba(255,255,255,.88); backdrop-filter: blur(14px);
+         border-bottom: 1px solid var(--line); z-index: 5; }
+  .rpill { display: flex; align-items: center; gap: 7px; background: var(--grad); color: #fff;
+           border: none; border-radius: 12px; padding: 9px 13px; font-weight: 800;
+           font-size: 15px; letter-spacing: 2.5px; cursor: pointer;
+           box-shadow: 0 3px 10px rgba(75,47,214,.35); }
+  .rpill small { font-size: 11px; letter-spacing: 0; opacity: .8; font-weight: 600; }
+  #hdr .mid { flex: 1; min-width: 0; }
+  #hdr .who { font-size: 12px; color: var(--mut); white-space: nowrap;
+              overflow: hidden; text-overflow: ellipsis; }
+  #hdr .live { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px;
+               font-weight: 700; color: #16a34a; }
+  #hdr .live.off { color: var(--mut); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .gear { border: none; background: #eef0f7; border-radius: 12px; width: 40px; height: 40px;
+          font-size: 18px; cursor: pointer; color: #444; }
+
+  #lvlwrap { height: 3px; background: transparent; display: none; }
+  #lvl { height: 100%; width: 0; background: #22c55e; transition: width .12s; border-radius: 2px; }
+
+  #feed { flex: 1; overflow-y: auto; padding: 14px 12px 130px; display: none;
+          scroll-behavior: smooth; }
+  #empty { text-align: center; color: var(--mut); margin-top: 60px; font-size: 14px;
+           line-height: 1.7; }
+  #empty .big { font-size: 40px; }
+
+  .row { display: flex; gap: 9px; margin-bottom: 12px; align-items: flex-end;
+         animation: up .22s ease both; }
+  @keyframes up { from { opacity: 0; transform: translateY(8px); } }
+  .row.me { flex-direction: row-reverse; }
+  .ava { width: 32px; height: 32px; border-radius: 50%; flex: none; display: grid;
+         place-items: center; color: #fff; font-size: 13.5px; font-weight: 800; }
+  .blk { max-width: 78%; }
+  .who-line { font-size: 11px; color: var(--mut); margin: 0 6px 3px; }
+  .row.me .who-line { text-align: right; }
+  .bb { background: var(--card); border-radius: 18px; border-bottom-left-radius: 6px;
+        padding: 10px 13px; box-shadow: 0 1px 4px rgba(23,26,35,.07); }
+  .row.me .bb { background: var(--grad); border-radius: 18px; border-bottom-right-radius: 6px;
+                box-shadow: 0 3px 12px rgba(75,47,214,.28); }
+  .bb .m { font-size: 16px; font-weight: 600; line-height: 1.38; }
+  .bb .s { font-size: 12.5px; color: var(--mut); margin-top: 4px; line-height: 1.4; }
+  .row.me .m { color: #fff; }
+  .row.me .s { color: rgba(255,255,255,.75); }
+  .row.pt { opacity: .5; }
+  .row.pt .bb .m { font-style: italic; font-weight: 500; }
+  .lat { font-size: 10px; color: #b6bcc9; margin: 3px 8px 0; }
+  .row.me .lat { text-align: right; }
+
+  .sumcard { background: linear-gradient(135deg, #fff8e8, #fff3d6); border: 1px solid #f3dfa8;
+             border-radius: 18px; padding: 14px 16px; margin: 4px 0 14px;
+             white-space: pre-wrap; font-size: 14px; line-height: 1.55;
+             animation: up .25s ease both; }
+  .sumcard .h { font-weight: 800; color: #92400e; font-size: 12px; letter-spacing: .5px;
+                margin-bottom: 8px; }
+
+  /* toast + mic */
+  #toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 118px;
+           background: rgba(23,26,35,.88); color: #fff; font-size: 13px;
+           padding: 9px 16px; border-radius: 100px; max-width: 86%; text-align: center;
+           z-index: 20; display: none; backdrop-filter: blur(6px); }
+  #micwrap { position: fixed; left: 0; right: 0; bottom: 0; display: none;
+             justify-content: center; padding: 0 0 max(20px, env(safe-area-inset-bottom));
+             background: linear-gradient(transparent, var(--bg) 55%); pointer-events: none;
+             z-index: 10; }
+  #micbtn { pointer-events: auto; width: 78px; height: 78px; border-radius: 50%; border: none;
+            background: var(--grad); color: #fff; font-size: 32px; cursor: pointer;
+            box-shadow: 0 10px 28px rgba(75,47,214,.45); transition: transform .12s; }
+  #micbtn:active { transform: scale(.93); }
+  #micbtn.rec { background: linear-gradient(135deg, #ff5d4f, #e02b1d); animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(224,43,29,.4); }
+                     70% { box-shadow: 0 0 0 22px rgba(224,43,29,0); }
+                     100% { box-shadow: 0 0 0 0 rgba(224,43,29,0); } }
+
+  /* bottom sheet */
+  #shade { position: fixed; inset: 0; background: rgba(10,12,20,.4); z-index: 24;
+           opacity: 0; pointer-events: none; transition: opacity .22s; }
+  #shade.on { opacity: 1; pointer-events: auto; }
+  #sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 25; background: #fff;
+           border-radius: 22px 22px 0 0; padding: 10px 18px max(24px, env(safe-area-inset-bottom));
+           transform: translateY(105%); transition: transform .26s cubic-bezier(.3,1,.4,1);
+           box-shadow: 0 -8px 40px rgba(0,0,0,.18); }
+  #sheet.on { transform: translateY(0); }
+  .grab { width: 42px; height: 4.5px; background: #dde0ea; border-radius: 3px; margin: 4px auto 14px; }
+  .sh { font-size: 12px; font-weight: 800; color: var(--mut); letter-spacing: .8px; margin: 14px 2px 8px; }
+  .srow { display: flex; gap: 10px; }
+  .sel { flex: 1; font-size: 15px; padding: 12px; border-radius: 12px;
+         border: 1.5px solid var(--line); background: #fafbfe; }
+  .act { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 6px;
+         background: none; border: none; border-bottom: 1px solid var(--line);
+         font-size: 15.5px; color: var(--ink); cursor: pointer; text-align: left; }
+  .act:last-child { border-bottom: none; }
+  .act .ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center;
+             font-size: 17px; background: #eef0f7; flex: none; }
+  .act.warn { color: #dc2626; }
+  .act.warn .ic { background: #fdeaea; }
 </style>
 </head>
 <body>
 
 <!-- ============ LANDING ============ -->
 <div id="landing">
-  <div class="land-wrap">
-    <div class="logo">🌐</div>
-    <h1>Room Dịch Họp</h1>
-    <div class="sub">Phiên dịch Việt ⇄ English thời gian thực · offline · on-premise</div>
-
-    <div class="card">
-      <h3>Thông tin của bạn</h3>
-      <input id="name" class="field" placeholder="Tên hiển thị / Display name" maxlength="20">
-      <select id="lang" class="field">
-        <option value="vi">🇻🇳 Tôi nói tiếng Việt</option>
-        <option value="en">🇬🇧 I speak English</option>
-      </select>
+  <div class="land">
+    <div class="brand">
+      <div class="mark">🌐</div>
+      <div>
+        <h1>Lingo Room</h1>
+        <p>Phiên dịch họp Việt ⇄ English · realtime · offline</p>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>Tạo phòng họp mới</h3>
-      <button class="btn" onclick="doCreate()">➕ Tạo phòng & lấy mã</button>
+    <div class="glass">
+      <label>BẠN LÀ AI</label>
+      <input id="name" class="tf" placeholder="Tên hiển thị / Your name" maxlength="20">
+      <div class="seg">
+        <button id="seg-vi" class="on" onclick="setLang('vi')">🇻🇳 Tiếng Việt</button>
+        <button id="seg-en" onclick="setLang('en')">🇬🇧 English</button>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>Vào phòng có sẵn</h3>
-      <input id="roomcode" class="field code-input" placeholder="MÃ PHÒNG" maxlength="5"
+    <button class="cta" onclick="doCreate()">➕ &nbsp;Tạo phòng họp mới</button>
+
+    <div class="or">HOẶC VÀO PHÒNG CÓ SẴN</div>
+    <div class="joinrow">
+      <input id="roomcode" class="tf code" placeholder="•••••" maxlength="5"
              autocapitalize="characters" autocomplete="off">
-      <button class="btn ghost" onclick="doJoin()">Vào phòng / Join</button>
+      <button class="go" onclick="doJoin()">→</button>
     </div>
 
     <div id="landerr"></div>
-    <div class="offline-note">Hoạt động không cần internet — cùng Wi-Fi/hotspot là dùng được.<br>
-      Mẹo: nhớ TẮT 4G trên điện thoại khi dùng mạng hotspot.</div>
+    <div class="foot">Chạy hoàn toàn trên mạng nội bộ — không cần internet.<br>
+      📵 Nhớ tắt 4G khi dùng Wi-Fi hotspot của phòng họp.</div>
   </div>
 </div>
 
 <!-- ============ MEETING ============ -->
 <header id="hdr">
-  <span class="room-chip" id="roomchip" onclick="copyRoom()" title="Bấm để copy mã phòng">·····</span>
-  <div class="info">
-    <div class="title">Room Dịch Họp</div>
-    <div class="roster" id="roster"></div>
+  <button class="rpill" onclick="copyRoom()"><span id="roomchip">·····</span><small>📋</small></button>
+  <div class="mid">
+    <div class="live off" id="livechip"><span class="dot"></span><span id="livetext">Mic tắt</span></div>
+    <div class="who" id="roster"></div>
   </div>
-  <button class="iconbtn" onclick="toggleTools()" title="Cài đặt & công cụ">⚙</button>
+  <button class="gear" onclick="openSheet()">⚙</button>
 </header>
+<div id="lvlwrap"><div id="lvl"></div></div>
 
-<div id="toolrow">
-  🎙 <select id="micsel" style="max-width:34%"></select>
-  👁 <select id="displang">
-      <option value="vi">Tiếng Việt</option>
-      <option value="en">English</option>
-    </select>
-  <button onclick="location.href='/transcript?room='+roomId">📥 Biên bản</button>
-  <button id="sumbtn" onclick="reqSummary()">📝 Tóm tắt</button>
-  <button onclick="newSession()" style="color:#d93025; border-color:#d93025">🆕 Họp mới</button>
+<div id="feed">
+  <div id="empty"><div class="big">🎙️</div>Chưa có ai nói.<br>Bấm nút mic phía dưới và bắt đầu trò chuyện —<br>bản dịch hiện dần <b>ngay khi đang nói</b>.</div>
 </div>
 
-<div class="level" id="levelbar"><div id="lvl"></div></div>
-<div id="feed"></div>
-<div id="status"></div>
-
+<div id="toast"></div>
 <div id="micwrap"><button id="micbtn" onclick="toggleMic()">🎙</button></div>
 
+<div id="shade" onclick="closeSheet()"></div>
+<div id="sheet">
+  <div class="grab"></div>
+  <div class="sh">THIẾT BỊ & HIỂN THỊ</div>
+  <div class="srow">
+    <select id="micsel" class="sel"></select>
+    <select id="displang" class="sel" style="max-width:44%">
+      <option value="vi">Đọc: Tiếng Việt</option>
+      <option value="en">Read: English</option>
+    </select>
+  </div>
+  <div class="sh">CUỘC HỌP</div>
+  <button class="act" onclick="closeSheet(); location.href='/transcript?room='+roomId">
+    <span class="ic">📥</span> Tải biên bản song ngữ (.md)</button>
+  <button class="act" id="sumbtn" onclick="closeSheet(); reqSummary()">
+    <span class="ic">📝</span> Tóm tắt cuộc họp (AI local)</button>
+  <button class="act warn" onclick="closeSheet(); newSession()">
+    <span class="ic">🆕</span> Bắt đầu cuộc họp mới</button>
+</div>
+
 <script>
-let ws, ctx, node, stream, myName, myLang, roomId = '';
+let ws, ctx, node, stream, myName, myLang = 'vi', roomId = '';
 let micOn = false, maxPeak = 0, micStartT = 0, micDead = false;
-let joined = false, wakeLock = null, pendingCreate = false;
+let joined = false, wakeLock = null, pendingCreate = false, toastT = null;
 
 function el(id) { return document.getElementById(id); }
-function setStatus(t) { el('status').textContent = t; }
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+function toast(t, ms) {
+  const x = el('toast');
+  x.textContent = t; x.style.display = 'block';
+  clearTimeout(toastT);
+  toastT = setTimeout(() => x.style.display = 'none', ms || 2600);
+}
+function setLive(on, text) {
+  el('livechip').className = 'live' + (on ? '' : ' off');
+  el('livetext').textContent = text;
+}
 
 async function keepAwake() {
   try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
@@ -158,10 +273,14 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && joined) keepAwake();
 });
 
-/* ---------- Landing flows ---------- */
+/* ---------- Landing ---------- */
+function setLang(l) {
+  myLang = l;
+  el('seg-vi').className = l === 'vi' ? 'on' : '';
+  el('seg-en').className = l === 'en' ? 'on' : '';
+}
 function readIdentity() {
   myName = el('name').value.trim();
-  myLang = el('lang').value;
   if (!myName) { el('landerr').textContent = 'Nhập tên của bạn trước nhé.'; return false; }
   localStorage.setItem('myName', myName);
   localStorage.setItem('myLang', myLang);
@@ -176,9 +295,9 @@ function doJoin() {
 }
 window.addEventListener('load', () => {
   el('name').value = localStorage.getItem('myName') || '';
-  el('lang').value = localStorage.getItem('myLang') || 'vi';
+  setLang(localStorage.getItem('myLang') || 'vi');
   const h = (location.hash || '').replace('#', '').toUpperCase();
-  if (h) el('roomcode').value = h;   // link/QR dang https://ip:8443/#MAPHONG
+  if (h) el('roomcode').value = h;
 });
 
 /* ---------- WebSocket ---------- */
@@ -193,7 +312,7 @@ function connect(isReconnect) {
   ws.onmessage = e => handle(JSON.parse(e.data));
   ws.onclose = () => {
     if (!joined) return;
-    setStatus('Mất kết nối — đang thử kết nối lại...');
+    toast('Mất kết nối — đang kết nối lại...');
     setTimeout(() => connect(true), 2000);
   };
   ws.onerror = () => { el('landerr').textContent = 'Không kết nối được server.'; };
@@ -203,15 +322,14 @@ function enterMeeting() {
   joined = true;
   el('landing').style.display = 'none';
   el('hdr').style.display = 'flex';
-  el('levelbar').style.display = 'block';
+  el('lvlwrap').style.display = 'block';
   el('feed').style.display = 'block';
-  el('status').style.display = 'block';
   el('micwrap').style.display = 'flex';
   el('roomchip').textContent = roomId;
   location.hash = roomId;
   el('displang').value = localStorage.getItem('dispLang') || myLang;
   el('displang').onchange = () => localStorage.setItem('dispLang', el('displang').value);
-  setStatus('Đã vào phòng ' + roomId + '. Bấm nút mic để nói — chữ và bản dịch hiện dần NGAY KHI đang nói.');
+  toast('Đã vào phòng ' + roomId + ' 🎉');
   keepAwake();
   fillMics();
 }
@@ -219,19 +337,24 @@ function enterMeeting() {
 function copyRoom() {
   const link = location.origin + '/#' + roomId;
   (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject())
-    .then(() => setStatus('Đã copy link mời: ' + link))
-    .catch(() => setStatus('Mã phòng: ' + roomId + ' — link: ' + link));
+    .then(() => toast('Đã copy link mời — gửi cho người khác là vào thẳng phòng'))
+    .catch(() => toast('Mã phòng: ' + roomId));
 }
-function toggleTools() {
-  const t = el('toolrow');
-  t.style.display = (t.style.display === 'flex') ? 'none' : 'flex';
-}
+function openSheet() { el('sheet').classList.add('on'); el('shade').classList.add('on'); }
+function closeSheet() { el('sheet').classList.remove('on'); el('shade').classList.remove('on'); }
 
-/* ---------- Message handling ---------- */
+/* ---------- Render ---------- */
+const AVA_COLORS = ['#6a5cff','#0ea5e9','#f97316','#10b981','#e11d48','#8b5cf6','#0891b2','#d97706'];
+function avaColor(name) {
+  let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return AVA_COLORS[h % AVA_COLORS.length];
+}
+function hideEmpty() { const e = el('empty'); if (e) e.remove(); }
+
 function handle(m) {
   if (m.type === 'joined') { roomId = m.room; if (!joined) enterMeeting(); return; }
   if (m.type === 'error') {
-    joined ? setStatus(m.text) : el('landerr').textContent = m.text;
+    joined ? toast(m.text) : el('landerr').textContent = m.text;
     try { ws.close(); } catch (e) {}
     joined = false;
     return;
@@ -239,49 +362,59 @@ function handle(m) {
   if (m.type === 'level') {
     const bar = el('lvl');
     bar.style.width = Math.min(100, m.ratio * 33) + '%';
-    bar.style.background = m.ratio >= 1 ? '#34a853' : '#d93025';
-    if (micDead) return;
-    if (m.speaking) setStatus('🎤 Đang thu giọng bạn — bản dịch hiện dần bên trên...');
-    else if (micOn) setStatus('Đang nghe...');
+    bar.style.background = m.ratio >= 1 ? '#22c55e' : '#f87171';
+    if (!micDead && micOn) setLive(true, m.speaking ? '🎤 Đang thu giọng...' : 'Đang nghe');
     return;
   }
-  if (m.type === 'sum_status') { setStatus(m.text); return; }
+  if (m.type === 'sum_status') { toast(m.text, 6000); return; }
   if (m.type === 'session_reset') {
     el('feed').innerHTML = '';
-    setStatus('🆕 Cuộc họp mới đã bắt đầu — biên bản cũ đã được lưu.');
+    toast('🆕 Cuộc họp mới — biên bản cũ đã được lưu.');
     return;
   }
   if (m.type === 'summary') {
+    hideEmpty();
     const html = esc(m.text)
-      .replace(/^#{2,3} (.*)$/gm, '<b style="font-size:15px">$1</b>')
+      .replace(/^#{2,3} (.*)$/gm, '<b>$1</b>')
       .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
-    const b = document.createElement('div');
-    b.className = 'bubble summary';
-    b.innerHTML = `<div class="meta">📝 Tóm tắt cuộc họp · ${m.time}</div>` +
-                  `<div class="main" style="font-weight:400">${html}</div>`;
-    el('feed').appendChild(b);
+    const c = document.createElement('div');
+    c.className = 'sumcard';
+    c.innerHTML = `<div class="h">📝 TÓM TẮT CUỘC HỌP · ${m.time}</div>${html}`;
+    el('feed').appendChild(c);
     el('feed').scrollTop = el('feed').scrollHeight;
-    setStatus('Đã có tóm tắt.');
     return;
   }
   if (m.type === 'roster') {
-    el('roster').textContent = m.members.map(x => `${x.name} (${x.lang.toUpperCase()})`).join(' · ');
+    el('roster').textContent = m.members.length + ' người: ' +
+      m.members.map(x => x.name + (x.lang === 'vi' ? ' 🇻🇳' : ' 🇬🇧')).join(', ');
     return;
   }
   if (m.type === 'drop') { const b = el(m.id); if (b) b.remove(); return; }
   if (m.type !== 'partial' && m.type !== 'final') return;
 
-  let b = el(m.id);
-  if (!b) { b = document.createElement('div'); b.id = m.id; el('feed').appendChild(b); }
-  b.className = 'bubble' + (m.name === myName ? ' mine' : '') + (m.type === 'partial' ? ' partial' : '');
+  hideEmpty();
+  const mine = m.name === myName;
+  let row = el(m.id);
+  if (!row) {
+    row = document.createElement('div');
+    row.id = m.id;
+    el('feed').appendChild(row);
+  }
+  row.className = 'row' + (mine ? ' me' : '') + (m.type === 'partial' ? ' pt' : '');
   const dispLang = el('displang').value;
   const mainText = (m.lang === dispLang) ? m.text : m.translation;
   const subText  = (m.lang === dispLang) ? m.translation : m.text;
   const flag = m.lang === 'vi' ? '🇻🇳' : '🇬🇧';
-  const timing = m.type === 'final' ? ` · ${m.dur}s · ASR ${m.t_asr}s + MT ${m.t_mt}s` : ' · …';
-  b.innerHTML = `<div class="meta">${esc(m.name)} ${flag}${timing}</div>` +
-                `<div class="main">${esc(mainText)}</div>` +
-                `<div class="sub">${esc(subText)}</div>`;
+  const lat = m.type === 'final'
+    ? `<div class="lat">${m.dur}s · ASR ${m.t_asr}s + MT ${m.t_mt}s</div>` : '';
+  const ava = mine ? '' :
+    `<div class="ava" style="background:${avaColor(m.name)}">${esc(m.name[0].toUpperCase())}</div>`;
+  row.innerHTML = ava +
+    `<div class="blk">
+       <div class="who-line">${esc(m.name)} ${flag}${m.type === 'partial' ? ' · đang nói…' : ''}</div>
+       <div class="bb"><div class="m">${esc(mainText)}</div><div class="s">${esc(subText)}</div></div>
+       ${lat}
+     </div>`;
   const feed = el('feed');
   while (feed.children.length > 150) feed.removeChild(feed.firstChild);
   feed.scrollTop = feed.scrollHeight;
@@ -291,19 +424,15 @@ function handle(m) {
 async function newSession() {
   if (!confirm('Bắt đầu cuộc họp mới?\nBiên bản hiện tại sẽ được lưu file và màn hình mọi người xóa trắng.')) return;
   try { await fetch('/new-session?room=' + roomId, {method: 'POST'}); }
-  catch (e) { setStatus('Lỗi: ' + e.message); }
+  catch (e) { toast('Lỗi: ' + e.message); }
 }
-
 async function reqSummary() {
-  const btn = el('sumbtn');
-  btn.disabled = true;
-  setStatus('Đang tóm tắt cuộc họp (LLM local, có thể mất 10-30s)...');
+  toast('Đang tóm tắt bằng AI local — chờ 10-30s...', 30000);
   try {
     const r = await fetch('/summary?room=' + roomId, {method: 'POST'});
     const d = await r.json();
-    if (d.error) setStatus(d.error);
-  } catch (e) { setStatus('Lỗi gọi tóm tắt: ' + e.message); }
-  finally { btn.disabled = false; }
+    if (d.error) toast(d.error);
+  } catch (e) { toast('Lỗi tóm tắt: ' + e.message); }
 }
 
 /* ---------- Mic ---------- */
@@ -311,14 +440,14 @@ async function fillMics() {
   try {
     const tmp = await navigator.mediaDevices.getUserMedia({audio: true});
     tmp.getTracks().forEach(t => t.stop());
-  } catch (e) { setStatus('Chưa được cấp quyền mic: ' + e.message); return; }
+  } catch (e) { toast('Chưa được cấp quyền mic: ' + e.message, 5000); return; }
   const devs = await navigator.mediaDevices.enumerateDevices();
   const sel = el('micsel');
   sel.innerHTML = '';
   devs.filter(d => d.kind === 'audioinput').forEach((d, i) => {
     const o = document.createElement('option');
     o.value = d.deviceId;
-    o.textContent = d.label || ('Mic ' + (i + 1));
+    o.textContent = '🎙 ' + (d.label || ('Mic ' + (i + 1)));
     sel.appendChild(o);
   });
   const saved = localStorage.getItem('micId');
@@ -334,10 +463,10 @@ async function toggleMic() {
     micOn = false;
     el('micbtn').textContent = '🎙';
     el('micbtn').classList.remove('rec');
+    setLive(false, 'Mic tắt');
     if (node) node.disconnect();
     if (stream) stream.getTracks().forEach(t => t.stop());
     if (ctx) ctx.close();
-    setStatus('Đã tắt mic.');
     return;
   }
   try {
@@ -345,7 +474,7 @@ async function toggleMic() {
     const cons = {echoCancellation: false, noiseSuppression: true, autoGainControl: true};
     if (micId) cons.deviceId = {exact: micId};
     stream = await navigator.mediaDevices.getUserMedia({audio: cons});
-  } catch (err) { setStatus('Không truy cập được mic: ' + err.message); return; }
+  } catch (err) { toast('Không truy cập được mic: ' + err.message, 5000); return; }
   maxPeak = 0; micStartT = Date.now(); micDead = false;
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   const src = ctx.createMediaStreamSource(stream);
@@ -361,10 +490,12 @@ async function toggleMic() {
       out[i] = Math.max(-32768, Math.min(32767, Math.round(v * 32768)));
     }
     if (Date.now() - micStartT > 3000 && maxPeak < 0.002) {
+      if (!micDead) toast('⚠ Mic này không có tín hiệu — mở ⚙ chọn mic khác!', 6000);
       micDead = true;
-      setStatus('⚠ Mic này KHÔNG có tín hiệu — mở ⚙ và chọn mic khác!');
+      setLive(false, '⚠ Mic không tín hiệu');
     } else if (micDead && maxPeak >= 0.002) {
-      micDead = false; setStatus('Mic OK — đang nghe...');
+      micDead = false;
+      setLive(true, 'Đang nghe');
     }
     ws.send(out.buffer);
   };
@@ -373,7 +504,7 @@ async function toggleMic() {
   micOn = true;
   el('micbtn').textContent = '⏸';
   el('micbtn').classList.add('rec');
-  setStatus('Đang nghe... cứ nói tự nhiên.');
+  setLive(true, 'Đang nghe');
 }
 </script>
 </body>
