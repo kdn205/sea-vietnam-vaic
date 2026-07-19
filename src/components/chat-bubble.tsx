@@ -1,8 +1,6 @@
-import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
-import { useI18n } from '@/lib/i18n';
 
 export type ChatBubbleEntry = {
   id: string;
@@ -16,7 +14,6 @@ export type ChatBubbleEntry = {
 
 type Props = {
   entry: ChatBubbleEntry;
-  onExplain?: (selectedText: string, contextText: string) => void;
 };
 
 // Both lines used to go through SelectableTextView (from @rob117/react-native-selectable-text)
@@ -24,11 +21,10 @@ type Props = {
 // blank (while still taking up full layout height) under this screen's rapid live updates -
 // for both the source and translated line, not just one. Plain selectable Text has no such
 // issue (this matches what History already used, unaffected). Native OS text selection/copy
-// still works via `selectable`; Explain moved from a selection menu to its own small button
-// below the entry, explaining the translated line with the source line as context.
-export function ChatBubble({ entry, onExplain }: Props) {
+// still works via `selectable`; Explain now lives as a single button in the session top bar
+// (see SessionTopBar/HeaderControls) that explains the latest entry, instead of per-message.
+export function ChatBubble({ entry }: Props) {
   const theme = useTheme();
-  const { t } = useI18n();
 
   const speakerColor = entry.speaker === 'Host' ? theme.speakerHost : theme.speakerGuest;
 
@@ -43,20 +39,6 @@ export function ChatBubble({ entry, onExplain }: Props) {
       <Text selectable style={[styles.translated, { color: theme.primary }]}>
         {entry.targetLang}: {entry.translated}
       </Text>
-      {onExplain && (
-        <Pressable
-          style={styles.explainButton}
-          hitSlop={6}
-          onPress={() => onExplain(entry.translated, entry.source)}
-        >
-          <SymbolView
-            name={{ ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' }}
-            tintColor={theme.textSecondary}
-            size={13}
-          />
-          <Text style={[styles.explainLabel, { color: theme.textSecondary }]}>{t('explain')}</Text>
-        </Pressable>
-      )}
     </View>
   );
 }
@@ -78,18 +60,6 @@ const styles = StyleSheet.create({
   translated: {
     fontSize: 16,
     lineHeight: 22,
-    fontWeight: '600',
-  },
-  explainButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    marginTop: 4,
-    paddingVertical: 2,
-  },
-  explainLabel: {
-    fontSize: 12,
     fontWeight: '600',
   },
 });

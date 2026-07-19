@@ -7,10 +7,12 @@ import { useThemeMode } from '@/lib/theme-mode';
 
 type Props = {
   style?: StyleProp<ViewStyle>;
+  /** Explains the latest transcript entry - only passed (and shown) from the in-session top bar. */
+  onExplain?: () => void;
 };
 
 /** Dark-mode toggle + VI/EN language switch, meant to sit together in a screen's top-right corner. */
-export function HeaderControls({ style }: Props) {
+export function HeaderControls({ style, onExplain }: Props) {
   const theme = useTheme();
   const { scheme, toggleDarkMode } = useThemeMode();
   const { lang, setLang } = useI18n();
@@ -31,6 +33,22 @@ export function HeaderControls({ style }: Props) {
           size={16}
         />
       </Pressable>
+
+      {onExplain && (
+        <Pressable
+          onPress={onExplain}
+          hitSlop={8}
+          style={[styles.iconButton, { backgroundColor: theme.primarySoft }]}
+          accessibilityRole="button"
+          accessibilityLabel="Explain latest message"
+        >
+          <SymbolView
+            name={{ ios: 'sparkles', android: 'auto_awesome', web: 'auto_awesome' }}
+            tintColor={theme.primary}
+            size={16}
+          />
+        </Pressable>
+      )}
 
       <Pressable
         onPress={() => setLang(lang === 'en' ? 'vi' : 'en')}

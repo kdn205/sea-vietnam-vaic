@@ -15,6 +15,8 @@ type Props = {
   onBack: () => void;
   onLeave: () => void;
   onOpenHistory: () => void;
+  /** Explains the latest transcript entry - omitted (hides the button) when there's nothing yet. */
+  onExplain?: () => void;
 };
 
 export function SessionTopBar({
@@ -25,6 +27,7 @@ export function SessionTopBar({
   onBack,
   onLeave,
   onOpenHistory,
+  onExplain,
 }: Props) {
   const theme = useTheme();
 
@@ -75,7 +78,7 @@ export function SessionTopBar({
         )}
       </View>
       <View style={styles.right}>
-        <HeaderControls />
+        <HeaderControls onExplain={onExplain} />
         {showSessionInfo && (
           <Pressable onPress={onLeave} hitSlop={8} style={styles.leaveButton}>
             <Text style={[styles.leaveLabel, { color: theme.danger }]}>{leaveLabel}</Text>
