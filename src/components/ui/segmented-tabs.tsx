@@ -1,5 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Option<T extends string> = { value: T; label: string };
@@ -10,20 +11,28 @@ type Props<T extends string> = {
   onChange: (value: T) => void;
 };
 
+/** iOS UISegmentedControl look: a recessed track with the selected segment riding a floating,
+ * shadowed knob - not a filled "chip" pill. */
 export function SegmentedTabs<T extends string>({ options, value, onChange }: Props<T>) {
   const theme = useTheme();
 
   return (
-    <View style={[styles.track, { backgroundColor: theme.card, borderColor: theme.border }]}>
+    <View style={[styles.track, { backgroundColor: theme.groupedBackground }]}>
       {options.map((opt) => {
         const selected = opt.value === value;
         return (
           <Pressable
             key={opt.value}
             onPress={() => onChange(opt.value)}
-            style={[styles.segment, selected && { backgroundColor: theme.text, shadowOpacity: 0.12 }]}
+            style={[
+              styles.segment,
+              selected && [styles.segmentSelected, { backgroundColor: theme.card }],
+            ]}
           >
-            <Text style={[styles.label, { color: selected ? theme.background : theme.textSecondary }]}>
+            <Text
+              style={[styles.label, { color: selected ? theme.text : theme.textSecondary }]}
+              numberOfLines={1}
+            >
               {opt.label}
             </Text>
           </Pressable>
@@ -36,22 +45,25 @@ export function SegmentedTabs<T extends string>({ options, value, onChange }: Pr
 const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 3,
-    gap: 3,
+    borderRadius: Radius.small,
+    padding: 2,
+    gap: 2,
   },
   segment: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 9,
+    paddingVertical: 7,
+    borderRadius: Radius.small - 2,
     alignItems: 'center',
+  },
+  segmentSelected: {
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 3,
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2,
   },
   label: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

@@ -3,9 +3,13 @@ import { Animated, Dimensions, Modal, ScrollView, StyleSheet, Text, TouchableOpa
 import { SymbolView } from 'expo-symbols';
 
 import { SessionCard, type HistorySession } from '@/components/session-card';
+import { SegmentedTabs } from '@/components/ui/segmented-tabs';
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 import type { StoredSession } from '@/lib/history-storage';
+
+type HistoryTab = 'saved' | 'summary';
 
 type Props = {
   visible: boolean;
@@ -68,6 +72,7 @@ export function HistoryDrawer({ visible, sessions, onClose, onDelete }: Props) {
   const { t } = useI18n();
   const [translateX] = useState(() => new Animated.Value(-DRAWER_WIDTH));
   const [selected, setSelected] = useState<StoredSession | null>(null);
+  const [tab, setTab] = useState<HistoryTab>('saved');
 
   useEffect(() => {
     Animated.timing(translateX, {
@@ -78,23 +83,38 @@ export function HistoryDrawer({ visible, sessions, onClose, onDelete }: Props) {
     if (!visible) setSelected(null);
   }, [visible]);
 
+  const visibleSessions = sessions.filter((s) => (tab === 'summary' ? !!s.summary : !s.summary));
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       {visible && <TouchableOpacity style={styles.scrim} onPress={onClose} activeOpacity={1} />}
-      <Animated.View style={[styles.drawer, { backgroundColor: theme.background, transform: [{ translateX }] }]}>
-        <View style={[styles.header, { borderBottomColor: theme.border }]}>
+      <Animated.View style={[styles.drawer, { backgroundColor: theme.groupedBackground, transform: [{ translateX }] }]}>
+        <View style={styles.header}>
           <Text style={[styles.headerText, { color: theme.text }]}>{t('history')}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10}>
-            <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} tintColor={theme.textSecondary} size={20} />
+          <TouchableOpacity onPress={onClose} hitSlop={10} style={[styles.closeButton, { backgroundColor: theme.card }]}>
+            <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} tintColor={theme.textSecondary} size={15} />
           </TouchableOpacity>
         </View>
 
-        {sessions.length === 0 && (
-          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>{t('noSessionsYet')}</Text>
+        <View style={styles.tabsWrap}>
+          <SegmentedTabs
+            options={[
+              { value: 'saved', label: t('historyTabSaved') },
+              { value: 'summary', label: t('historyTabSummary') },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+        </View>
+
+        {visibleSessions.length === 0 && (
+          <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+            {tab === 'summary' ? t('noSummarySessionsYet') : t('noSessionsYet')}
+          </Text>
         )}
 
         <ScrollView style={styles.body}>
-          {sessions.map((s) => (
+          {visibleSessions.map((s) => (
             <SessionCard
               key={s.id}
               session={toHistorySession(s, t('inProgress'), t('untitledSession'))}
@@ -107,27 +127,37 @@ export function HistoryDrawer({ visible, sessions, onClose, onDelete }: Props) {
 
       <Modal visible={selected !== null} transparent animationType="slide" onRequestClose={() => setSelected(null)}>
         <View style={styles.detailScrim}>
-          <View style={[styles.detailBox, { backgroundColor: theme.background }]}>
+          <View style={[styles.detailBox, { backgroundColor: theme.card }]}>
+            <View style={styles.detailHandle}>
+              <View style={[styles.handleBar, { backgroundColor: theme.border }]} />
+            </View>
             <View style={styles.detailHeader}>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text }}>
+              <Text style={{ fontSize: 20, fontWeight: '700', color: theme.text }}>
                 {selected ? formatDate(selected.startedAt) : ''}
               </Text>
-              <TouchableOpacity onPress={() => setSelected(null)} hitSlop={10}>
-                <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} tintColor={theme.textSecondary} size={20} />
+              <TouchableOpacity onPress={() => setSelected(null)} hitSlop={10} style={[styles.closeButton, { backgroundColor: theme.groupedBackground }]}>
+                <SymbolView name={{ ios: 'xmark', android: 'close', web: 'close' }} tintColor={theme.textSecondary} size={15} />
               </TouchableOpacity>
             </View>
             <ScrollView>
               {selected?.summary ? (
-                <View
-                  style={[styles.summaryBox, { backgroundColor: theme.primarySoft, borderColor: theme.primarySoftBorder }]}
-                >
+                <View style={[styles.summaryBox, { backgroundColor: theme.primarySoft }]}>
                   <Text style={{ color: theme.primary, fontWeight: '700', marginBottom: 4 }}>{t('summary')}</Text>
-                  <Text style={{ color: theme.text, fontSize: 13, lineHeight: 19 }}>{selected.summary}</Text>
+                  <Text style={{ color: theme.text, fontSize: 13.5, lineHeight: 20 }}>{selected.summary}</Text>
                 </View>
               ) : null}
               {selected?.entries.map((e) => (
                 <View key={e.id} style={{ marginBottom: 12 }}>
-                  <Text style={{ fontSize: 11, color: theme.textSecondary, marginBottom: 2 }}>{e.speaker}</Text>
+                  <Text
+                    style={{
+                      fontSize: 11,
+                      fontWeight: '700',
+                      color: e.speaker === 'Host' ? theme.speakerHost : theme.speakerGuest,
+                      marginBottom: 2,
+                    }}
+                  >
+                    {e.speaker}
+                  </Text>
                   <Text style={{ fontSize: 14, color: theme.text }}>
                     {e.sourceLang.toUpperCase()}: {e.source}
                   </Text>
@@ -167,15 +197,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
   },
   headerText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  tabsWrap: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   body: {
     flex: 1,
     padding: 16,
+    paddingTop: 4,
   },
   emptyText: {
     fontSize: 13,
@@ -189,20 +230,28 @@ const styles = StyleSheet.create({
   },
   detailBox: {
     maxHeight: '80%',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: Radius.xlarge,
+    borderTopRightRadius: Radius.xlarge,
     padding: 20,
+  },
+  detailHandle: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  handleBar: {
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
   },
   detailHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 14,
   },
   summaryBox: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: Radius.medium,
+    padding: 14,
     marginBottom: 16,
   },
 });

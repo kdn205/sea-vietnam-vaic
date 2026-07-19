@@ -11,17 +11,18 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Network from 'expo-network';
 import * as Clipboard from 'expo-clipboard';
 
-import { ControlBar } from '@/components/control-bar';
+import { VoiceControlCard } from '@/components/voice-control-card';
+import { EndSessionModal } from '@/components/end-session-modal';
 import { ExplainPanel } from '@/components/explain-panel';
 import { HistoryDrawer } from '@/components/history-drawer';
 import { SessionTopBar } from '@/components/session-top-bar';
 import { HostQrScreen } from '@/components/screens/host-qr-screen';
-import { JoinCodeScreen } from '@/components/screens/join-code-screen';
 import { JoinQrScreen } from '@/components/screens/join-qr-screen';
 import { SessionChatScreen } from '@/components/screens/session-chat-screen';
 import { SessionParticipantsScreen } from '@/components/screens/session-participants-screen';
 import { WelcomeScreen } from '@/components/screens/welcome-screen';
-import { GhostButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -71,7 +72,7 @@ type LogEntry = {
 };
 
 type Role = 'solo' | 'host' | 'join';
-type SetupStep = 'select' | 'host-qr' | 'join-scan' | 'join-code';
+type SetupStep = 'select' | 'host-qr' | 'join-scan';
 type SessionTab = 'chat' | 'participants';
 
 export default function HomeScreen() {
@@ -88,15 +89,29 @@ export default function HomeScreen() {
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   // Solo/Host can always speak; Join must request and wait for the Host to approve.
   const [micApproved, setMicApproved] = useState(true);
+  const [micRequestPending, setMicRequestPending] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<{ deviceId: string; name: string }[]>([]);
 
   const sessionRef = useRef<HostSession | JoinSession | null>(null);
   const scannedRef = useRef(false);
   const deviceIdRef = useRef(`dev-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  // Set right before we close our own socket as part of the local leave flow, so the
+  // resulting 'close' event doesn't get misread as the host having ended the meeting.
+  const intentionalDisconnectRef = useRef(false);
+  // requestLeaveSession is redefined every render but the join socket's onDisconnect callback
+  // is only bound once (at connect time) - it calls this ref instead so it always reaches the
+  // latest closure rather than the stale one captured when the socket first connected.
+  const requestLeaveSessionRef = useRef<(reason: 'self' | 'disconnected') => void>(() => {});
+
+  // ---- End-of-session save/summary prompt ------------------------------------------------
+  const [endSessionVisible, setEndSessionVisible] = useState(false);
+  const [endSessionReason, setEndSessionReason] = useState<'self' | 'disconnected'>('self');
+  const [saveAsSummaryChecked, setSaveAsSummaryChecked] = useState(false);
+  const [endSessionSaving, setEndSessionSaving] = useState(false);
 
   // ---- History + explain (Gemini) ---------------------------------------------------------
-  // Past sessions are persisted via history-storage.ts and read directly by src/app/history.tsx
-  // (a separate expo-router screen) - this screen only needs to write them as they happen.
+  // Past sessions are persisted via history-storage.ts and shown in the in-session HistoryDrawer
+  // sidebar (opened from SessionTopBar) - not reachable from the pre-session welcome screen.
   const [historyVisible, setHistoryVisible] = useState(false);
   const [sessions, setSessions] = useState<StoredSession[]>([]);
   const [explainVisible, setExplainVisible] = useState(false);
@@ -118,6 +133,9 @@ export default function HomeScreen() {
 
   const currentSessionIdRef = useRef<string | null>(null);
   const sessionStartedAtRef = useRef(0);
+  // When the Gemini setup popup is opened from the "save as summary" checkbox mid-leave, this
+  // remembers to bring the end-session modal back once setup is closed.
+  const [reopenEndSessionAfterGeminiSetup, setReopenEndSessionAfterGeminiSetup] = useState(false);
 
   // ---- Main transcript state -------------------------------------------------------------
   const [isRunning, setIsRunning] = useState(false);
@@ -125,17 +143,23 @@ export default function HomeScreen() {
   const [partialText, setPartialText] = useState('');
   const [draftTranslated, setDraftTranslated] = useState('');
   const [log, setLog] = useState<LogEntry[]>([]);
+  // Mirrors `log` for the network-callback closures below (onDisconnect etc.) which are bound
+  // once at connection time and would otherwise only ever see the log as of that render.
+  const logRef = useRef<LogEntry[]>([]);
+  logRef.current = log;
   // 0..1 noise-gate sensitivity - NOT related to pause/cut detection. A segment's peak
   // volume must clear (1 - micSensitivity) or it's discarded as background noise/cross-talk.
   // Higher = picks up quieter voices too (more noise gets through). Lower = requires louder,
   // more deliberate speech - turn this down in a noisy room and speak up.
   const [micSensitivity, setMicSensitivity] = useState(0.5);
+  // Seconds elapsed since the current recording started - purely for the waveform's mm:ss
+  // display, ticks via recordingIntervalRef while isRunning.
+  const [recordingElapsedSec, setRecordingElapsedSec] = useState(0);
 
   // ---- Presentation-only UI state (no effect on the pipeline above) ----------------------
   const [sessionTab, setSessionTab] = useState<SessionTab>('chat');
-  const [isMuted, setIsMuted] = useState(false);
-  const [speakerOn, setSpeakerOn] = useState(true);
 
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const isRunningRef = useRef(false);
   const useOnDeviceRef = useRef(true);
   // Best-effort guess of who's currently talking; updated by the native 'languagedetection'
@@ -195,10 +219,24 @@ export default function HomeScreen() {
       useOnDeviceRef.current = supportsOnDevice;
       console.log(`[LiveTranslate] supportsOnDeviceRecognition() = ${supportsOnDevice}`);
 
-      for (const locale of ['en-US', 'vi-VN']) {
-        ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale }).catch(() => {
-          // Best-effort only; start() will still fall back to the network recognizer.
-        });
+      if (supportsOnDevice) {
+        // androidTriggerOfflineModelDownload() shows a system dialog/notification every single
+        // time it's called while a locale isn't fully installed yet - so calling it unconditionally
+        // on every launch nagged the user repeatedly. Check what's already installed first and
+        // only trigger the download for locales that are actually still missing.
+        ExpoSpeechRecognitionModule.getSupportedLocales({})
+          .then(({ installedLocales }) => {
+            const missingLocales = ['en-US', 'vi-VN'].filter((locale) => !installedLocales.includes(locale));
+            for (const locale of missingLocales) {
+              ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale }).catch(() => {
+                // Best-effort only; start() will still fall back to the network recognizer.
+              });
+            }
+          })
+          .catch(() => {
+            // Can't tell what's installed (e.g. service package not found) - skip silently
+            // rather than nagging with a download prompt on every launch.
+          });
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -218,20 +256,37 @@ export default function HomeScreen() {
     });
   }, []);
 
+  // Closes the Gemini settings popup and, if it was opened from the "save as summary"
+  // checkbox mid-leave, brings the end-session modal back so the user can pick up where
+  // they left off.
+  const closeGeminiSettings = () => {
+    setApiKeySettingsVisible(false);
+    if (reopenEndSessionAfterGeminiSetup) {
+      setReopenEndSessionAfterGeminiSetup(false);
+      setEndSessionVisible(true);
+    }
+  };
+
   const saveGeminiSettings = async () => {
     await setGeminiConsent(consentInput);
     setGeminiConsentState(consentInput);
 
     if (!consentInput) {
       // Declined - don't persist a config even if a URL was filled in, keep it fully off.
-      setApiKeySettingsVisible(false);
+      closeGeminiSettings();
       return;
     }
 
     const config: GeminiConfig = { mode: 'server', serverUrl: serverUrlInput.trim() };
     await setGeminiConfig(config);
     setGeminiConfigState(config);
-    setApiKeySettingsVisible(false);
+    closeGeminiSettings();
+  };
+
+  const openGeminiSetupFromEndSession = () => {
+    setEndSessionVisible(false);
+    setReopenEndSessionAfterGeminiSetup(true);
+    setApiKeySettingsVisible(true);
   };
 
   const startServerQrScan = async () => {
@@ -259,19 +314,23 @@ export default function HomeScreen() {
     sessionStartedAtRef.current = Date.now();
   };
 
-  // Fire-and-forget: summarize the just-finished session via Gemini and mark it ended in
-  // storage. Runs after the UI has already moved on, so a slow/failed API call never blocks
-  // leaving the session.
-  const endPersistedSession = async () => {
+  // Finalizes the just-finished session in storage per the end-session modal's choice:
+  // discard removes the auto-saved partial record entirely, save keeps it (optionally as a
+  // Gemini summary instead of the raw transcript).
+  const finalizePersistedSession = async (shouldSave: boolean, asSummary: boolean) => {
     const sessionId = currentSessionIdRef.current;
     currentSessionIdRef.current = null;
-    if (!sessionId || log.length === 0) return;
-    if (!geminiReady || !geminiConfig) {
-      console.log('[LiveTranslate] Gemini not configured/consented, skipping summary');
+    if (!sessionId || logRef.current.length === 0) return;
+
+    if (!shouldSave) {
+      await deleteSession(sessionId);
+      return;
+    }
+    if (!asSummary || !geminiReady || !geminiConfig) {
       await endSession(sessionId);
       return;
     }
-    const transcript = log
+    const transcript = logRef.current
       .map((e) => `${e.speaker} (${e.sourceLang}): ${e.source}\n-> (${e.targetLang}): ${e.translated}`)
       .join('\n\n');
     try {
@@ -295,14 +354,17 @@ export default function HomeScreen() {
 
   const handleExplain = async (selectedText: string, contextText: string) => {
     if (!selectedText.trim()) return;
+    if (!geminiReady) {
+      // There's no persistent settings entry point anymore (see VoiceControlCard - the
+      // control bar is down to just the record button), so this is the only way in: pop the
+      // Gemini setup dialog straight up rather than a dead-end inline error.
+      setApiKeySettingsVisible(true);
+      return;
+    }
     setExplainSelectedText(selectedText);
     setExplainResult(null);
     setExplainError(null);
     setExplainVisible(true);
-    if (!geminiReady || !geminiConfig) {
-      setExplainError(geminiConsent === false ? t('consentDeclinedMessage') : t('notConfiguredMessage'));
-      return;
-    }
     setExplainLoading(true);
     try {
       const result = await explainText(geminiConfig, selectedText, contextText);
@@ -349,6 +411,8 @@ export default function HomeScreen() {
       if (msg.deviceId === deviceIdRef.current) {
         console.log(`[LiveTranslate] handleIncomingMessage(speak-decision): approved=${msg.approved}`);
         setMicApproved(msg.approved);
+        setMicRequestPending(false);
+        setJoinStatus(msg.approved ? '' : t('micRequestDeclined'));
       }
       return;
     }
@@ -407,14 +471,22 @@ export default function HomeScreen() {
           name: nameInput.trim() || t('you'),
         });
         setMicApproved(false);
+        setMicRequestPending(false);
         beginPersistedSession();
         setRole('join');
       },
       onMessage: handleIncomingMessage,
       onDisconnect: (error) => {
         sessionRef.current = null;
-        setJoinStatus(error ? t('statusDisconnected', error.message) : t('statusDisconnectedGeneric'));
         scannedRef.current = false;
+        if (intentionalDisconnectRef.current) {
+          // We closed our own socket as part of requestLeaveSession('self') below - that
+          // flow is already showing/handling the save prompt, so don't show it a second time.
+          intentionalDisconnectRef.current = false;
+          return;
+        }
+        setJoinStatus(error ? t('statusDisconnected', error.message) : t('statusDisconnectedGeneric'));
+        requestLeaveSessionRef.current('disconnected');
       },
     });
   };
@@ -424,8 +496,18 @@ export default function HomeScreen() {
     setRole('host');
   };
 
-  const leaveSession = () => {
-    void endPersistedSession();
+  // Clears the recording timer, saves/discards the transcript per the caller's choice, tears
+  // down the network session, and returns to the welcome screen.
+  const finalizeAndReset = async (shouldSave: boolean, asSummary: boolean) => {
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    setRecordingElapsedSec(0);
+
+    await finalizePersistedSession(shouldSave, asSummary);
+
+    intentionalDisconnectRef.current = true;
     sessionRef.current?.close();
     sessionRef.current = null;
     setRole(null);
@@ -436,7 +518,29 @@ export default function HomeScreen() {
     setLog([]);
     setPendingRequests([]);
     setMicApproved(true);
+    setMicRequestPending(false);
     setSessionTab('chat');
+    setEndSessionVisible(false);
+    setEndSessionSaving(false);
+  };
+
+  // Entry point for "leave" everywhere in the UI (back button, Leave button, cancelling
+  // host-qr setup, or the host having ended the meeting). Skips the save prompt when there's
+  // nothing to save yet.
+  const requestLeaveSession = (reason: 'self' | 'disconnected') => {
+    if (logRef.current.length === 0) {
+      void finalizeAndReset(false, false);
+      return;
+    }
+    setEndSessionReason(reason);
+    setSaveAsSummaryChecked(false);
+    setEndSessionVisible(true);
+  };
+  requestLeaveSessionRef.current = requestLeaveSession;
+
+  const confirmEndSession = async (shouldSave: boolean) => {
+    setEndSessionSaving(true);
+    await finalizeAndReset(shouldSave, shouldSave && saveAsSummaryChecked);
   };
 
   const requestToSpeak = () => {
@@ -446,6 +550,7 @@ export default function HomeScreen() {
       deviceId: deviceIdRef.current,
       name: nameInput.trim() || t('you'),
     });
+    setMicRequestPending(true);
     setJoinStatus(t('statusRequestSent'));
   };
 
@@ -779,6 +884,11 @@ export default function HomeScreen() {
       setPartialText('');
       resetIncrementalTranslation();
       volumeLevel.value = withTiming(0, { duration: 300 });
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+        recordingIntervalRef.current = null;
+      }
+      setRecordingElapsedSec(0);
       return;
     }
 
@@ -790,6 +900,10 @@ export default function HomeScreen() {
 
     isRunningRef.current = true;
     setIsRunning(true);
+    setRecordingElapsedSec(0);
+    recordingIntervalRef.current = setInterval(() => {
+      setRecordingElapsedSec((s) => s + 1);
+    }, 1000);
     startSegment();
   };
 
@@ -798,7 +912,7 @@ export default function HomeScreen() {
   if (role === null) {
     if (setupStep === 'join-scan') {
       return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
           <JoinQrScreen
             onBack={() => setSetupStep('select')}
             onScanned={onQrScanned}
@@ -808,49 +922,31 @@ export default function HomeScreen() {
       );
     }
 
-    if (setupStep === 'join-code') {
-      return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-          <JoinCodeScreen onBack={() => setSetupStep('select')} onScanQrInstead={startJoinScan} />
-        </SafeAreaView>
-      );
-    }
-
     if (setupStep === 'host-qr' && hostAddress) {
       return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
           <HostQrScreen
             host={hostAddress.host}
             port={hostAddress.port}
             peerCount={peerCount}
             onStart={enterHostSession}
-            onCancel={leaveSession}
+            onCancel={() => requestLeaveSession('self')}
           />
         </SafeAreaView>
       );
     }
 
     return (
-      <>
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
-          <WelcomeScreen
-            nameInput={nameInput}
-            onNameChange={setNameInput}
-            onJoinQr={startJoinScan}
-            onJoinCode={() => setSetupStep('join-code')}
-            onPresenter={startHostMode}
-            onSolo={enterSolo}
-            onOpenHistory={openHistory}
-            statusMessage={joinStatus || undefined}
-          />
-        </SafeAreaView>
-        <HistoryDrawer
-          visible={historyVisible}
-          sessions={sessions}
-          onClose={() => setHistoryVisible(false)}
-          onDelete={handleDeleteSession}
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
+        <WelcomeScreen
+          nameInput={nameInput}
+          onNameChange={setNameInput}
+          onJoinQr={startJoinScan}
+          onPresenter={startHostMode}
+          onSolo={enterSolo}
+          statusMessage={joinStatus || undefined}
         />
-      </>
+      </SafeAreaView>
     );
   }
 
@@ -881,28 +977,23 @@ export default function HomeScreen() {
   const canControlSession = role !== 'join' || micApproved;
 
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: theme.background }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: theme.groupedBackground }}>
       <View
         style={{
           flex: 1,
           padding: 16,
-          // The web-only floating pill tab bar (app-tabs.web.tsx) is absolutely positioned
-          // over the page content, so screens with no top bar of their own (e.g. the
-          // Participants tab in solo mode) need extra clearance on web or it overlaps
-          // and intercepts taps - same pattern src/app/explore.tsx used to use.
-          paddingTop: Platform.select({ web: 64, default: 16 }),
           gap: 12,
         }}
       >
-        {role !== 'solo' && (
-          <SessionTopBar
-            sessionId={hostAddress ? String(hostAddress.port) : 'LAN'}
-            peopleCount={peerCount}
-            leaveLabel={t('leave')}
-            onLeave={leaveSession}
-            onOpenHistory={openHistory}
-          />
-        )}
+        <SessionTopBar
+          showSessionInfo={role !== 'solo'}
+          sessionId={hostAddress ? String(hostAddress.port) : 'LAN'}
+          peopleCount={peerCount}
+          leaveLabel={t('leave')}
+          onBack={() => requestLeaveSession('self')}
+          onLeave={() => requestLeaveSession('self')}
+          onOpenHistory={openHistory}
+        />
 
         {sessionTab === 'chat' ? (
           <SessionChatScreen
@@ -912,10 +1003,8 @@ export default function HomeScreen() {
             partialText={partialText}
             draftTranslated={draftTranslated}
             status={status}
-            volumeLevel={volumeLevel}
-            micSensitivity={micSensitivity}
-            onMicSensitivityChange={setMicSensitivity}
             onExplain={handleExplain}
+            pendingRequestCount={role === 'host' ? pendingRequests.length : 0}
           />
         ) : (
           <SessionParticipantsScreen
@@ -930,23 +1019,22 @@ export default function HomeScreen() {
         )}
 
         {canControlSession ? (
-          <ControlBar
+          <VoiceControlCard
+            volume={volumeLevel}
             isRunning={isRunning}
-            isMuted={isMuted}
-            onToggleMute={() => setIsMuted((v) => !v)}
+            elapsedSec={recordingElapsedSec}
             onToggleRunning={onToggle}
-            onToggleSpeaker={() => setSpeakerOn((v) => !v)}
-            speakerOn={speakerOn}
-            onTextSize={() => {}}
-            onMore={() => setApiKeySettingsVisible(true)}
-            muteLabel={isMuted ? t('unmute') : t('mute')}
-            speakerLabel={t('speaker')}
-            textSizeLabel={t('textSize')}
-            moreLabel={t('more')}
+            micSensitivity={micSensitivity}
+            onMicSensitivityChange={setMicSensitivity}
           />
         ) : (
           <View style={{ alignItems: 'center', gap: 6 }}>
-            <GhostButton label={t('requestToSpeak')} onPress={requestToSpeak} />
+            <SecondaryButton
+              label={micRequestPending ? t('waitingForApproval') : t('requestToSpeak')}
+              onPress={requestToSpeak}
+              disabled={micRequestPending}
+              icon={{ ios: 'mic.fill', android: 'mic', web: 'mic' }}
+            />
             {joinStatus.length > 0 && (
               <Text style={{ fontSize: 12.5, color: theme.textSecondary }}>{joinStatus}</Text>
             )}
@@ -967,19 +1055,17 @@ export default function HomeScreen() {
         visible={apiKeySettingsVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setApiKeySettingsVisible(false)}
+        onRequestClose={closeGeminiSettings}
       >
         <View
           style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 24 }}
         >
           {serverQrScanVisible ? (
-            <View
-              style={{ backgroundColor: theme.background, borderRadius: 16, padding: 20, gap: 12 }}
-            >
-              <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }}>
+            <View style={{ backgroundColor: theme.card, borderRadius: 20, padding: 20, gap: 14, ...Shadow.large }}>
+              <Text style={{ fontSize: 20, fontWeight: '600', color: theme.text }}>
                 {t('scanQrServerTitle')}
               </Text>
-              <View style={{ width: '100%', aspectRatio: 1, borderRadius: 12, overflow: 'hidden' }}>
+              <View style={{ width: '100%', aspectRatio: 1, borderRadius: 14, overflow: 'hidden' }}>
                 <CameraView
                   style={{ flex: 1 }}
                   facing="back"
@@ -991,30 +1077,30 @@ export default function HomeScreen() {
             </View>
           ) : (
             <ScrollView
-              style={{ maxHeight: '85%', backgroundColor: theme.background, borderRadius: 16 }}
-              contentContainerStyle={{ padding: 20, paddingBottom: 12, gap: 12 }}
+              style={{ maxHeight: '85%', backgroundColor: theme.card, borderRadius: 20, ...Shadow.large }}
+              contentContainerStyle={{ padding: 20, paddingBottom: 14, gap: 14 }}
             >
-              <Text style={{ fontSize: 17, fontWeight: '700', color: theme.text }}>
+              <Text style={{ fontSize: 20, fontWeight: '600', color: theme.text }}>
                 {t('geminiSettingsTitle')}
               </Text>
 
               <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
                 <Switch value={consentInput} onValueChange={setConsentInput} />
-                <Text style={{ flex: 1, fontSize: 13, lineHeight: 18, color: theme.textSecondary }}>
+                <Text style={{ flex: 1, fontSize: 13.5, lineHeight: 19, color: theme.textSecondary }}>
                   {t('geminiConsentText')}
                 </Text>
               </View>
 
               {consentInput && (
                 <>
-                  <Text style={{ fontSize: 12.5, color: theme.textSecondary }}>{t('serverUrlHint')}</Text>
+                  <Text style={{ fontSize: 13, color: theme.textSecondary }}>{t('serverUrlHint')}</Text>
                   <SecondaryButton label={t('scanQr')} onPress={startServerQrScan} />
                   <TextInput
                     style={{
-                      borderWidth: 1,
-                      borderColor: theme.border,
-                      borderRadius: 12,
-                      padding: 12,
+                      backgroundColor: theme.groupedBackground,
+                      borderRadius: 14,
+                      padding: 14,
+                      fontSize: 15,
                       color: theme.text,
                     }}
                     value={serverUrlInput}
@@ -1028,12 +1114,12 @@ export default function HomeScreen() {
               )}
 
               <View style={{ flexDirection: 'row', gap: 8 }}>
-                <PrimaryButton label={t('save')} onPress={saveGeminiSettings} style={{ flex: 1 }} />
                 <SecondaryButton
                   label={t('close')}
-                  onPress={() => setApiKeySettingsVisible(false)}
+                  onPress={closeGeminiSettings}
                   style={{ flex: 1 }}
                 />
+                <PrimaryButton label={t('save')} onPress={saveGeminiSettings} style={{ flex: 1 }} />
               </View>
             </ScrollView>
           )}
@@ -1045,6 +1131,18 @@ export default function HomeScreen() {
         sessions={sessions}
         onClose={() => setHistoryVisible(false)}
         onDelete={handleDeleteSession}
+      />
+
+      <EndSessionModal
+        visible={endSessionVisible}
+        reason={endSessionReason}
+        saveAsSummary={saveAsSummaryChecked}
+        onToggleSaveAsSummary={setSaveAsSummaryChecked}
+        summaryAvailable={geminiReady}
+        onRequestGeminiSetup={openGeminiSetupFromEndSession}
+        saving={endSessionSaving}
+        onDiscard={() => void confirmEndSession(false)}
+        onSave={() => void confirmEndSession(true)}
       />
     </SafeAreaView>
   );

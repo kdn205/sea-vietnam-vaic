@@ -1,9 +1,10 @@
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ParticipantRow } from '@/components/participant-row';
-import { GhostButton } from '@/components/ui/buttons';
+import { GhostButton, SecondaryButton } from '@/components/ui/buttons';
 import { HintBanner } from '@/components/ui/hint-banner';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 
@@ -43,24 +44,36 @@ export function SessionParticipantsScreen({
       <SegmentedTabs
         options={[
           { value: 'chat', label: t('chat') },
-          { value: 'participants', label: t('participants') },
+          {
+            value: 'participants',
+            label:
+              isHost && pendingRequests.length > 0
+                ? `${t('participants')} (${pendingRequests.length})`
+                : t('participants'),
+          },
         ]}
         value={sessionTab}
         onChange={onChangeSessionTab}
       />
 
-      {isHost &&
-        pendingRequests.map((r) => (
-          <View key={r.deviceId} style={[styles.requestRow, { backgroundColor: theme.primarySoft }]}>
-            <Text style={[styles.requestText, { color: theme.text }]}>{t('wantsToSpeak', r.name)}</Text>
-            <View style={styles.requestButtons}>
-              <GhostButton label={t('approve')} onPress={() => onApprove(r.deviceId)} />
-              <GhostButton label={t('decline')} onPress={() => onDecline(r.deviceId)} />
+      {isHost && pendingRequests.length > 0 && (
+        <View style={styles.requestGroup}>
+          {pendingRequests.map((r) => (
+            <View key={r.deviceId} style={[styles.requestRow, { backgroundColor: theme.primarySoft }]}>
+              <Text style={[styles.requestText, { color: theme.text }]}>{t('wantsToSpeak', r.name)}</Text>
+              <View style={styles.requestButtons}>
+                <GhostButton label={t('decline')} onPress={() => onDecline(r.deviceId)} />
+                <SecondaryButton label={t('approve')} onPress={() => onApprove(r.deviceId)} />
+              </View>
             </View>
-          </View>
-        ))}
+          ))}
+        </View>
+      )}
 
-      <ScrollView style={styles.list}>
+      <ScrollView
+        style={[styles.list, { backgroundColor: theme.card, borderColor: theme.border }]}
+        contentContainerStyle={styles.listContent}
+      >
         {participants.map((p) => (
           <ParticipantRow
             key={p.name}
@@ -87,13 +100,16 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
   },
+  requestGroup: {
+    gap: 8,
+  },
   requestRow: {
-    borderRadius: 12,
-    padding: 10,
-    gap: 6,
+    borderRadius: Radius.medium,
+    padding: 12,
+    gap: 8,
   },
   requestText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '600',
   },
   requestButtons: {
@@ -102,5 +118,10 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+  },
+  listContent: {
+    paddingHorizontal: 14,
   },
 });
