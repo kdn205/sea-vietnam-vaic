@@ -380,6 +380,15 @@ export default function HomeScreen() {
     }
   };
 
+  // Single Explain trigger (in the top bar, next to the dark-mode toggle) instead of a
+  // per-message button - explains the most recently finalized entry. Hidden entirely by
+  // SessionTopBar/HeaderControls when there's nothing to explain yet (see the ternary below).
+  const explainLatest = () => {
+    const last = logRef.current[logRef.current.length - 1];
+    if (!last) return;
+    void handleExplain(last.translated, last.source);
+  };
+
   // ---- Session (host/join) wiring ---------------------------------------------------------
 
   const handleIncomingMessage = (msg: NetMessage) => {
@@ -993,6 +1002,7 @@ export default function HomeScreen() {
           onBack={() => requestLeaveSession('self')}
           onLeave={() => requestLeaveSession('self')}
           onOpenHistory={openHistory}
+          onExplain={log.length > 0 ? explainLatest : undefined}
         />
 
         {sessionTab === 'chat' ? (
@@ -1003,7 +1013,6 @@ export default function HomeScreen() {
             partialText={partialText}
             draftTranslated={draftTranslated}
             status={status}
-            onExplain={handleExplain}
             pendingRequestCount={role === 'host' ? pendingRequests.length : 0}
           />
         ) : (

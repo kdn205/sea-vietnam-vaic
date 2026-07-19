@@ -14,7 +14,6 @@ export type ChatBubbleEntry = {
 
 type Props = {
   entry: ChatBubbleEntry;
-  onExplain?: (selectedText: string, contextText: string) => void;
 };
 
 /** Plain-text transcript line (web) - matches the native plain-text style, no bubble box. */

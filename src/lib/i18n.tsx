@@ -88,6 +88,8 @@ const dictionaries = {
     savingSummary: 'Summarizing...',
     historyTabSaved: 'Saved',
     historyTabSummary: 'Summary',
+    newMessages: (n: number) => (n === 1 ? '1 new message' : `${n} new messages`),
+    scrollToLatest: 'Jump to latest',
   },
   vi: {
     welcomeTitle: 'Xin chào',
@@ -174,6 +176,8 @@ const dictionaries = {
     savingSummary: 'Đang tóm tắt...',
     historyTabSaved: 'Đã lưu',
     historyTabSummary: 'Tóm tắt',
+    newMessages: (n: number) => `${n} tin nhắn mới`,
+    scrollToLatest: 'Về tin nhắn mới nhất',
   },
 } as const;
 
