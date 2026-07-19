@@ -43,11 +43,9 @@ export function ChatBubble({ entry, onExplain }: Props) {
       {entry.speaker ? (
         <Text style={[styles.speaker, { color: speakerColor }]}>{entry.speaker}</Text>
       ) : null}
-      <SelectableTextView menuOptions={menuOptions} onSelection={handleSelection(entry.source)}>
-        <Text style={[styles.source, { color: theme.text }]}>
-          {entry.sourceLang}: {entry.source}
-        </Text>
-      </SelectableTextView>
+      <Text selectable style={[styles.source, { color: theme.text }]}>
+        {entry.sourceLang}: {entry.source}
+      </Text>
       <SelectableTextView menuOptions={menuOptions} onSelection={handleSelection(entry.translated)}>
         <Text style={[styles.translated, { color: theme.primary }]}>
           {entry.targetLang}: {entry.translated}
