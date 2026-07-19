@@ -21,7 +21,7 @@ export function HeaderControls({ style }: Props) {
       <Pressable
         onPress={toggleDarkMode}
         hitSlop={8}
-        style={[styles.iconButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+        style={[styles.iconButton, { backgroundColor: theme.primarySoft }]}
         accessibilityRole="button"
         accessibilityLabel={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       >
@@ -35,12 +35,12 @@ export function HeaderControls({ style }: Props) {
       <Pressable
         onPress={() => setLang(lang === 'en' ? 'vi' : 'en')}
         hitSlop={8}
-        style={[styles.langPill, { backgroundColor: theme.card, borderColor: theme.border }]}
+        style={[styles.langPill, { backgroundColor: theme.primarySoft }]}
         accessibilityRole="button"
         accessibilityLabel="Switch app language"
       >
         <Text style={[styles.langOption, { color: lang === 'vi' ? theme.primary : theme.textSecondary }]}>VI</Text>
-        <View style={[styles.langDivider, { backgroundColor: theme.border }]} />
+        <View style={[styles.langDivider, { backgroundColor: theme.primarySoftBorder }]} />
         <Text style={[styles.langOption, { color: lang === 'en' ? theme.primary : theme.textSecondary }]}>EN</Text>
       </Pressable>
     </View>
@@ -57,7 +57,6 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -66,7 +65,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     height: 32,
     borderRadius: 16,
-    borderWidth: 1,
     paddingHorizontal: 10,
     gap: 6,
   },

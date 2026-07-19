@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 
@@ -34,16 +35,16 @@ export function ExplainPanel({ visible, selectedText, explanation, loading, erro
     <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
       {visible && <TouchableOpacity style={styles.scrim} onPress={onClose} activeOpacity={1} />}
       <Animated.View
-        style={[styles.panel, { backgroundColor: theme.background, transform: [{ translateX }] }]}
+        style={[styles.panel, { backgroundColor: theme.groupedBackground, transform: [{ translateX }] }]}
       >
-        <View style={[styles.header, { borderBottomColor: theme.border }]}>
+        <View style={styles.header}>
           <Text style={[styles.headerText, { color: theme.text }]}>{t('explainTitle')}</Text>
-          <TouchableOpacity onPress={onClose} hitSlop={10}>
+          <TouchableOpacity onPress={onClose} hitSlop={10} style={[styles.closeButton, { backgroundColor: theme.card }]}>
             <Text style={[styles.closeText, { color: theme.primary }]}>{t('close')}</Text>
           </TouchableOpacity>
         </View>
         <ScrollView style={styles.body}>
-          <View style={[styles.quoteBox, { borderLeftColor: theme.primary }]}>
+          <View style={[styles.quoteBox, { backgroundColor: theme.card }]}>
             <Text style={[styles.quoteText, { color: theme.textSecondary }]}>"{selectedText}"</Text>
           </View>
           {loading && <ActivityIndicator color={theme.primary} style={{ marginTop: 16 }} />}
@@ -77,27 +78,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
+    paddingBottom: 14,
   },
   headerText: {
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  closeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: Radius.pill,
   },
   closeText: {
     fontSize: 14,
+    fontWeight: '600',
   },
   body: {
     flex: 1,
     padding: 16,
+    paddingTop: 0,
   },
   quoteBox: {
-    borderLeftWidth: 3,
-    paddingLeft: 10,
+    borderRadius: Radius.medium,
+    padding: 12,
     marginBottom: 16,
   },
   quoteText: {
     fontStyle: 'italic',
+    lineHeight: 20,
   },
   errorText: {},
   explanationText: {

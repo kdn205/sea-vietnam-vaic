@@ -1,90 +1,128 @@
+import { GlassView } from 'expo-glass-effect';
 import { SymbolView } from 'expo-symbols';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HeaderControls } from '@/components/ui/header-controls';
+import { Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 type Props = {
+  /** Whether to show the session id / people-count / Leave button (host & join only). */
+  showSessionInfo: boolean;
   sessionId: string;
   peopleCount: number;
   leaveLabel: string;
+  onBack: () => void;
   onLeave: () => void;
   onOpenHistory: () => void;
 };
 
-export function SessionTopBar({ sessionId, peopleCount, leaveLabel, onLeave, onOpenHistory }: Props) {
+export function SessionTopBar({
+  showSessionInfo,
+  sessionId,
+  peopleCount,
+  leaveLabel,
+  onBack,
+  onLeave,
+  onOpenHistory,
+}: Props) {
   const theme = useTheme();
 
   return (
-    <View style={[styles.bar, { backgroundColor: theme.card, borderColor: theme.border }]}>
+    <View style={styles.shadowWrap}>
+      <GlassView
+        glassEffectStyle="regular"
+        style={[
+          styles.bar,
+          Platform.OS !== 'ios' && { backgroundColor: theme.glassBackground, borderColor: theme.glassBorder, borderWidth: 1 },
+        ]}
+      >
       <View style={styles.left}>
         <Pressable
-          onPress={onOpenHistory}
+          onPress={onBack}
           hitSlop={10}
-          style={[styles.iconButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+          style={[styles.iconButton, { backgroundColor: theme.primarySoft }]}
         >
           <SymbolView
-            name={{ ios: 'clock', android: 'history', web: 'history' }}
-            tintColor={theme.textSecondary}
+            name={{ ios: 'chevron.left', android: 'arrow_back', web: 'arrow_back' }}
+            tintColor={theme.primary}
             size={16}
           />
         </Pressable>
-        <View>
-          <Text style={[styles.sessionId, { color: theme.text }]}>Session {sessionId}</Text>
-          <View style={styles.peopleChip}>
-            <SymbolView
-              name={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
-              tintColor={theme.textSecondary}
-              size={11}
-            />
-            <Text style={[styles.peopleCount, { color: theme.textSecondary }]}>{peopleCount}</Text>
+        <Pressable
+          onPress={onOpenHistory}
+          hitSlop={10}
+          style={[styles.iconButton, { backgroundColor: theme.primarySoft }]}
+        >
+          <SymbolView
+            name={{ ios: 'sidebar.left', android: 'view_sidebar', web: 'view_sidebar' }}
+            tintColor={theme.primary}
+            size={16}
+          />
+        </Pressable>
+        {showSessionInfo && (
+          <View>
+            <Text style={[styles.sessionId, { color: theme.text }]}>Session {sessionId}</Text>
+            <View style={styles.peopleChip}>
+              <SymbolView
+                name={{ ios: 'person.2.fill', android: 'group', web: 'group' }}
+                tintColor={theme.textSecondary}
+                size={11}
+              />
+              <Text style={[styles.peopleCount, { color: theme.textSecondary }]}>{peopleCount}</Text>
+            </View>
           </View>
-        </View>
+        )}
       </View>
       <View style={styles.right}>
         <HeaderControls />
-        <Pressable onPress={onLeave} style={[styles.leaveButton, { backgroundColor: theme.primary }]}>
-          <Text style={styles.leaveLabel}>{leaveLabel}</Text>
-        </Pressable>
+        {showSessionInfo && (
+          <Pressable onPress={onLeave} hitSlop={8} style={styles.leaveButton}>
+            <Text style={[styles.leaveLabel, { color: theme.danger }]}>{leaveLabel}</Text>
+          </Pressable>
+        )}
       </View>
+      </GlassView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  shadowWrap: {
+    ...Shadow.medium,
+    borderRadius: Radius.large,
+    marginBottom: 12,
+  },
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 16,
-    borderWidth: 1,
-    marginBottom: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: Radius.large,
     gap: 8,
   },
   left: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     flexShrink: 1,
   },
   iconButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sessionId: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   right: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
   peopleChip: {
     flexDirection: 'row',
@@ -97,13 +135,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   leaveButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 999,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
   },
   leaveLabel: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

@@ -7,46 +7,96 @@ import '@/global.css';
 
 import { Platform } from 'react-native';
 
+// Apple Human Interface Guidelines-style palette: system blue accent, iOS label/secondary-label
+// grays, and a grouped-list background/card split (screen background vs. elevated card surface).
 export const Colors = {
   light: {
-    text: '#0B1220',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
-    primary: '#1657F0',
-    primaryPressed: '#1148CC',
-    primarySoft: '#EAF1FE',
-    primarySoftBorder: '#D3E3FD',
-    success: '#22C55E',
-    border: '#E5E7EB',
-    card: '#F7F8FA',
-    chatBubbleMine: '#EAF1FE',
-    chatBubbleTheirs: '#F7F8FA',
-    danger: '#EF4444',
-    star: '#F5A623',
+    text: '#000000',
+    textSecondary: '#6E6E73',
+    background: '#FFFFFF',
+    // Screen-level backdrop for grouped/list layouts (iOS systemGroupedBackground) - sits
+    // just behind `card` surfaces so cards read as elevated instead of flat.
+    groupedBackground: '#F2F2F7',
+    card: '#FFFFFF',
+    border: '#E5E5EA',
+    primary: '#007AFF',
+    primaryPressed: '#0064D1',
+    primarySoft: '#E8F1FE',
+    primarySoftBorder: '#CFE3FE',
+    success: '#34C759',
+    danger: '#FF3B30',
+    star: '#FF9F0A',
+    chatBubbleMine: '#E8F1FE',
+    chatBubbleTheirs: '#F2F2F7',
+    speakerHost: '#B8442A',
+    speakerGuest: '#7C4DBF',
+    // Frosted-glass fallback for platforms without expo-glass-effect's native Liquid Glass
+    // material (Android/web) - a translucent tinted surface standing in for the real blur.
+    glassBackground: 'rgba(255, 255, 255, 0.78)',
+    glassBorder: 'rgba(255, 255, 255, 0.9)',
+    // Faint top-edge highlight painted over solid buttons/cards for a glossier, raised feel.
+    highlight: 'rgba(255, 255, 255, 0.35)',
   },
   dark: {
-    text: '#F2F4F8',
-    background: '#0B0D10',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
-    primary: '#4C82F7',
-    primaryPressed: '#6E99F8',
-    primarySoft: '#152238',
-    primarySoftBorder: '#233657',
-    success: '#34D399',
-    border: '#2A2D33',
-    card: '#16181C',
-    chatBubbleMine: '#152238',
-    chatBubbleTheirs: '#16181C',
-    danger: '#F87171',
-    star: '#F5C24C',
+    text: '#FFFFFF',
+    textSecondary: '#8E8E93',
+    background: '#000000',
+    groupedBackground: '#000000',
+    card: '#1C1C1E',
+    border: '#38383A',
+    primary: '#0A84FF',
+    primaryPressed: '#409CFF',
+    primarySoft: '#0F2A4A',
+    primarySoftBorder: '#1D3A5F',
+    success: '#30D158',
+    danger: '#FF453A',
+    star: '#FF9F0A',
+    chatBubbleMine: '#0F2A4A',
+    chatBubbleTheirs: '#1C1C1E',
+    speakerHost: '#E38C6C',
+    speakerGuest: '#B896EE',
+    glassBackground: 'rgba(28, 28, 30, 0.78)',
+    glassBorder: 'rgba(255, 255, 255, 0.16)',
+    highlight: 'rgba(255, 255, 255, 0.08)',
   },
 } as const;
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
+
+// Corner-radius scale matching iOS's rounded-rect language, from small chips to sheet corners.
+export const Radius = {
+  small: 10,
+  medium: 14,
+  large: 20,
+  xlarge: 28,
+  pill: 999,
+} as const;
+
+// Elevation presets - a soft, diffuse drop shadow so cards/buttons/floating bars read as
+// physically raised above the screen instead of flat, à la iOS's layered depth.
+export const Shadow = {
+  small: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  large: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.16,
+    shadowRadius: 24,
+    elevation: 10,
+  },
+} as const;
 
 export const Fonts = Platform.select({
   ios: {

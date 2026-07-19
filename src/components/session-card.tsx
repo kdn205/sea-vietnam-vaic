@@ -1,6 +1,7 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Radius, Shadow } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type HistorySession = {
@@ -24,9 +25,14 @@ export function SessionCard({
   const theme = useTheme();
 
   return (
-    <Pressable style={[styles.card, { borderColor: theme.border }]} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [styles.card, { backgroundColor: theme.card, opacity: pressed ? 0.7 : 1 }]}
+      onPress={onPress}
+    >
       <View style={styles.left}>
-        <Text style={[styles.title, { color: theme.text }]}>{session.title}</Text>
+        <Text style={[styles.title, { color: theme.text }]} numberOfLines={1}>
+          {session.title}
+        </Text>
         <Text style={[styles.meta, { color: theme.textSecondary }]}>
           {session.time} · {session.langPair}
         </Text>
@@ -54,36 +60,9 @@ export function SessionCard({
       <SymbolView
         name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
         tintColor={theme.textSecondary}
-        size={16}
+        size={14}
       />
     </Pressable>
-  );
-}
-
-export function SavedTranslationRow({
-  title,
-  time,
-  langPair,
-}: {
-  title: string;
-  time: string;
-  langPair: string;
-}) {
-  const theme = useTheme();
-  return (
-    <View style={[styles.card, { borderColor: theme.border }]}>
-      <View style={styles.left}>
-        <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-        <Text style={[styles.meta, { color: theme.textSecondary }]}>
-          {time} · {langPair}
-        </Text>
-      </View>
-      <SymbolView
-        name={{ ios: 'star.fill', android: 'star', web: 'star' }}
-        tintColor={theme.star}
-        size={18}
-      />
-    </View>
   );
 }
 
@@ -92,8 +71,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    borderRadius: Radius.medium,
+    marginBottom: 8,
+    ...Shadow.small,
   },
   left: {
     flex: 1,

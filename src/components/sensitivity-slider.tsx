@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react';
 import { PanResponder, StyleSheet, View, type GestureResponderEvent, type LayoutChangeEvent } from 'react-native';
 
+import { useTheme } from '@/hooks/use-theme';
+
 type Props = {
   /** 0..1 */
   value: number;
@@ -9,6 +11,7 @@ type Props = {
 
 /** Minimal drag slider (no native dependency) - used for the mic silence-threshold control. */
 export function SensitivitySlider({ value, onValueChange }: Props) {
+  const theme = useTheme();
   const [trackWidth, setTrackWidth] = useState(0);
   const trackWidthRef = useRef(0);
 
@@ -34,9 +37,9 @@ export function SensitivitySlider({ value, onValueChange }: Props) {
 
   return (
     <View style={styles.track} onLayout={onLayout} {...panResponder.panHandlers}>
-      <View style={styles.trackBase} />
-      <View style={[styles.filled, { width: `${value * 100}%` }]} />
-      <View style={[styles.thumb, { left: trackWidth * value - 9 }]} />
+      <View style={[styles.trackBase, { backgroundColor: theme.border }]} />
+      <View style={[styles.filled, { width: `${value * 100}%`, backgroundColor: theme.primary }]} />
+      <View style={[styles.thumb, { left: trackWidth * value - 9, backgroundColor: theme.primary }]} />
     </View>
   );
 }
@@ -52,20 +55,22 @@ const styles = StyleSheet.create({
     right: 0,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#333333',
   },
   filled: {
     position: 'absolute',
     left: 0,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#1976D2',
   },
   thumb: {
     position: 'absolute',
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: '#1976D2',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.25,
+    shadowRadius: 2,
+    elevation: 2,
   },
 });

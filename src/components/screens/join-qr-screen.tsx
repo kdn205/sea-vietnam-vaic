@@ -3,7 +3,9 @@ import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { HeaderControls } from '@/components/ui/header-controls';
 import { HintBanner } from '@/components/ui/hint-banner';
+import { Radius } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 import { useI18n } from '@/lib/i18n';
 
@@ -21,20 +23,22 @@ export function JoinQrScreen({ onBack, onScanned, statusMessage }: Props) {
   const [torchOn, setTorchOn] = useState(false);
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={[styles.container, { backgroundColor: theme.groupedBackground }]}>
       <View style={styles.header}>
-        <Pressable onPress={onBack} style={styles.backButton}>
-          <SymbolView
-            name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
-            tintColor={theme.primary}
-            size={22}
-          />
-        </Pressable>
-        <Text style={[styles.headerTitle, { color: theme.primary }]}>{t('joinWithQr')}</Text>
-        <View style={styles.backButton} />
+        <View style={styles.headerLeft}>
+          <Pressable onPress={onBack} style={styles.backButton} hitSlop={8}>
+            <SymbolView
+              name={{ ios: 'chevron.left', android: 'chevron_left', web: 'chevron_left' }}
+              tintColor={theme.primary}
+              size={22}
+            />
+          </Pressable>
+          <Text style={[styles.headerTitle, { color: theme.text }]}>{t('joinWithQr')}</Text>
+        </View>
+        <HeaderControls />
       </View>
 
-      <Text style={[styles.instruction, { color: theme.text }]}>{t('scanQrInstruction')}</Text>
+      <Text style={[styles.instruction, { color: theme.textSecondary }]}>{t('scanQrInstruction')}</Text>
 
       <HintBanner
         icon={{ ios: 'wifi', android: 'wifi', web: 'wifi' }}
@@ -95,21 +99,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 1,
+  },
   backButton: {
-    width: 32,
+    width: 24,
   },
   headerTitle: {
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   instruction: {
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
   },
   scannerBox: {
     width: '100%',
     aspectRatio: 1,
-    borderRadius: 16,
+    borderRadius: Radius.large,
     overflow: 'hidden',
     backgroundColor: '#000',
   },
